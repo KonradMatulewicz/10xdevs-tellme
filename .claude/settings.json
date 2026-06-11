@@ -1,6 +1,20 @@
-
-  {"enabledPlugins": {
+{
+  "enabledPlugins": {
     "expo@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d='';process.stdin.on('data',x=>d+=x);process.stdin.on('end',()=>{try{const p=JSON.parse(d);const f=(p.tool_response||{}).filePath||p.tool_input.file_path;if(f)process.stdout.write(f+'\\n')}catch(e){}})\" | { read -r f && [ -n \"$f\" ] && npx prettier --write --ignore-unknown \"$f\"; } 2>/dev/null || true",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   },
   "permissions": {
     "allow": [
@@ -24,14 +38,7 @@
       "Edit",
       "Write"
     ],
-    "ask": [
-      "Bash(curl *)",
-      "Bash(wget *)",
-      "Bash(git push *)",
-      "Bash(git push)"
-    ],
-    "deny": [
-      "Bash(rm -rf *)",
-    ]
+    "ask": ["Bash(curl *)", "Bash(wget *)", "Bash(git push *)", "Bash(git push)"],
+    "deny": ["Bash(rm -rf *)"]
   }
 }
