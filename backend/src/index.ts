@@ -1,27 +1,26 @@
+import { Hono } from 'hono';
+
+import { tasks } from './routes/tasks';
 import { createSupabaseClient } from './supabase';
+import type { AppEnv, Env } from './types';
 
-export interface Env {
-  SUPABASE_URL: string;
-  SUPABASE_ANON_KEY: string;
-  // Auth / additional bindings added in a later session.
-}
+export type { Env };
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
+const app = new Hono<AppEnv>();
 
-    if (request.method === 'GET' && url.pathname === '/health') {
-      return Response.json({ ok: true });
-    }
+// Liveness — no auth, no DB.
+app.get('/health', (c) => c.json({ ok: true }));
 
-    // Connectivity probe: proves @supabase/supabase-js works on workerd.
-    // Under RLS an anon select returns [] with no error — a clean round-trip.
-    if (request.method === 'GET' && url.pathname === '/db-check') {
-      const supabase = createSupabaseClient(env);
-      const { data, error } = await supabase.from('tasks').select('id').limit(1);
-      return Response.json({ ok: !error, rows: data?.length ?? 0, error: error?.message ?? null });
-    }
+// Connectivity probe: proves @supabase/supabase-js works on workerd.
+// Under RLS an anon select returns [] with no error — a clean round-trip.
+app.get('/db-check', async (c) => {
+  const supabase = createSupabaseClient(c.env);
+  const { data, error } = await supabase.from('tasks').select('id').limit(1);
+  return c.json({ ok: !error, rows: data?.length ?? 0, error: error?.message ?? null });
+});
 
-    return new Response('Not Found', { status: 404 });
-  },
-} satisfies ExportedHandler<Env>;
+app.route('/tasks', tasks);
+
+app.notFound((c) => c.json({ error: 'Not Found' }, 404));
+
+export default app;

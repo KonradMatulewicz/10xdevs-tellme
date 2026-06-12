@@ -67,22 +67,44 @@ fetch override, network egress, and the anon-key/RLS path all work. Production s
 (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) are set via `wrangler secret put`; local dev reads
 `backend/.dev.vars` (gitignored). Both secret systems are documented in root `.env.example`.
 
+## Auth + task CRUD — DONE (2026-06-12)
+
+Backend now serves JWT-scoped task CRUD via **Hono** (`backend/src/`). Auth model: the
+**mobile app drives Supabase Auth** (sign-up / login / Google OAuth / password reset);
+the Worker only **requires a `Bearer` JWT and forwards it** (`supabaseForToken`), so RLS
+enforces per-user isolation — no password hashing in the Worker (stays under the 10 ms
+free-tier CPU cap). `requireAuth` middleware gates all `/tasks*` routes.
+
+Migration applied: `alter table public.tasks alter column user_id set default auth.uid();`
+so inserts omit `user_id` while RLS still binds rows to the caller.
+
+Endpoints (all under `/tasks`, auth required):
+
+- `GET /tasks?status=todo|done|deleted&q=<kw>` — tab filter + keyword search (FR-009/014).
+- `POST /tasks` — `{ text }` or `{ texts: [] }` (batch from extraction); defaults `todo` (FR-008).
+- `PATCH /tasks/:id` — `{ text? }` edit (FR-010), `{ status }` mark-done / soft-delete /
+  restore (FR-011/012).
+
+**Verified end-to-end** against a real test user (JWT minted via the Auth API): 16/16 checks
+— create→list→done→delete→restore→edit→search, plus 400 (validation), 404 (unknown id), and
+401 (no token). `user_id` auto-populates and RLS scoping confirmed.
+
 ## Still deferred to a later session
 
-- Auth: register / login (email-password + Google OAuth), JWT forwarding so RLS scopes
-  queries to the authenticated user.
-- Full task CRUD + the To-Do / Done / Deleted state model and keyword search.
+- AI pipeline: audio transcription relay + task extraction endpoint (`POST /transcribe`),
+  needs an LLM/Whisper key as a Wrangler secret.
+- Mobile app: the Expo screens + Supabase Auth client wiring (register/login/OAuth UI).
 - A `staging` environment in `wrangler.toml` and GitHub Actions branch-deploy.
-- Budgeting the $5/mo Paid plan before real password auth lands (10 ms free-tier CPU cap).
+- Budgeting the $5/mo Paid plan before traffic grows (10 ms free-tier CPU cap).
+- An `updated_at` DB trigger (currently set by the Worker on PATCH).
 
 ## Live result
 
-- **Status:** ✅ Supabase wired, deployed, and verified.
+- **Status:** ✅ Auth + task CRUD live and verified (16/16 E2E checks).
 - **Deployed URL:** https://tellme-backend.konrad-matulewicz1.workers.dev
-- **Endpoints:** `GET /health` → `200 {"ok":true}`; `GET /db-check` →
-  `200 {"ok":true,"rows":0,"error":null}`; unknown paths → `404`.
-- **Latest Version ID:** `c8bf8655-57b7-4a59-b9d8-4235e4adba25`
-- **Bundle:** 747.51 KiB / gzip 142.56 KiB (well under the 3 MB free-tier limit).
-- **Deployed at:** 2026-06-12.
-- **First deploy (health-only):** Version `1c617d76-10f9-4032-b7e1-d4caed214095`,
-  21.57 KiB / gzip 5.37 KiB.
+- **Endpoints:** `GET /health`, `GET /db-check`, `GET|POST /tasks`, `PATCH /tasks/:id`;
+  unknown paths → `404`, missing token → `401`.
+- **Latest Version ID:** `dc705f41-df14-4ed7-a0f0-8500d9913496`
+- **Bundle:** 812.41 KiB / gzip 157.92 KiB (well under the 3 MB free-tier limit).
+- **History:** health-only `1c617d76` (21.57 KiB) → Supabase `c8bf8655` (747.51 KiB) →
+  auth+CRUD `dc705f41` (812.41 KiB).
