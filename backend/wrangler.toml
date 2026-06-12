@@ -1,0 +1,8 @@
+name = "tellme-backend"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# First deploy is intentionally minimal: a /health endpoint to prove the
+# pipeline. Supabase wiring (with the native-fetch override) and secrets land
+# in a later session — see context/foundation/infrastructure.md.

@@ -1,0 +1,17 @@
+{
+  "name": "tellme-backend",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tellme backend API — Cloudflare Worker (TypeScript REST: auth, AI transcription relay, task CRUD)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:remote": "wrangler dev --remote",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail --format pretty",
+    "typegen": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260612.1",
+    "wrangler": "^4.100.0"
+  }
+}
