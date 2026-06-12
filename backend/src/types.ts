@@ -1,9 +1,11 @@
+import type { Ai } from '@cloudflare/workers-types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface Env {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
-  // AI relay keys (OPENAI_API_KEY, …) land with the transcription increment.
+  ANTHROPIC_API_KEY: string; // Claude task extraction
+  AI: Ai; // Cloudflare Workers AI binding — Whisper transcription
 }
 
 /** Per-request values set by middleware. */

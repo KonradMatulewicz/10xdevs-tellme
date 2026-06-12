@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import { tasks } from './routes/tasks';
+import { transcribe } from './routes/transcribe';
 import { createSupabaseClient } from './supabase';
 import type { AppEnv, Env } from './types';
 
@@ -20,6 +21,7 @@ app.get('/db-check', async (c) => {
 });
 
 app.route('/tasks', tasks);
+app.route('/transcribe', transcribe);
 
 app.notFound((c) => c.json({ error: 'Not Found' }, 404));
 

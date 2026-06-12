@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# Workers AI binding — Whisper transcription (POST /transcribe). No external
+# STT vendor/key: runs on the Cloudflare account's AI allocation.
+[ai]
+binding = "AI"
+
 # First deploy is intentionally minimal: a /health endpoint to prove the
 # pipeline. Supabase wiring (with the native-fetch override) and secrets land
 # in a later session — see context/foundation/infrastructure.md.

@@ -89,22 +89,43 @@ Endpoints (all under `/tasks`, auth required):
 — create→list→done→delete→restore→edit→search, plus 400 (validation), 404 (unknown id), and
 401 (no token). `user_id` auto-populates and RLS scoping confirmed.
 
+## AI voice pipeline — DONE (2026-06-12)
+
+`POST /transcribe` (auth required) implements the PRD's voice-to-task flow (FR-004..FR-008):
+multipart audio → transcript → extracted tasks → auto-saved (RLS-scoped) → returned. Raw
+audio is never persisted (privacy NFR). Errors return a clear state, never a silent empty
+list.
+
+- **Transcription:** Cloudflare **Workers AI** (`@cf/openai/whisper-large-v3-turbo`) via the
+  `[ai]` binding — no external STT vendor or key, multilingual (PL/EN). (Originally wired to
+  OpenAI Whisper, but that account had no quota; switched to Workers AI — a deliberate
+  deviation from `infrastructure.md`'s "ignore Workers AI" note, traded for zero extra
+  vendor/billing.)
+- **Extraction:** Claude **`claude-opus-4-8`** via `@anthropic-ai/sdk`, structured output
+  (`output_config.format` json_schema → `{ tasks }`), low effort. `ANTHROPIC_API_KEY` is a
+  Wrangler secret. Business rule per PRD (extract verbatim, don't merge/infer/filter).
+- **Verified end-to-end:** a TTS-generated clip ("buy milk / call the dentist / finish the
+  quarterly report") returned `201` in **3.9s** (well under the 10s NFR) with all three tasks
+  transcribed, extracted, and saved. Claude extraction alone measured 2.8s.
+
+> Cleanup note: the now-unused `OPENAI_API_KEY` secret is still on the Worker (harmless).
+> Delete it by hand if desired — and rotate the OpenAI key that was shared during setup.
+
 ## Still deferred to a later session
 
-- AI pipeline: audio transcription relay + task extraction endpoint (`POST /transcribe`),
-  needs an LLM/Whisper key as a Wrangler secret.
 - Mobile app: the Expo screens + Supabase Auth client wiring (register/login/OAuth UI).
 - A `staging` environment in `wrangler.toml` and GitHub Actions branch-deploy.
 - Budgeting the $5/mo Paid plan before traffic grows (10 ms free-tier CPU cap).
 - An `updated_at` DB trigger (currently set by the Worker on PATCH).
+- Direct-to-storage audio upload (currently proxied through the Worker) if payloads grow.
 
 ## Live result
 
-- **Status:** ✅ Auth + task CRUD live and verified (16/16 E2E checks).
+- **Status:** ✅ Auth + CRUD + voice pipeline live and verified.
 - **Deployed URL:** https://tellme-backend.konrad-matulewicz1.workers.dev
-- **Endpoints:** `GET /health`, `GET /db-check`, `GET|POST /tasks`, `PATCH /tasks/:id`;
-  unknown paths → `404`, missing token → `401`.
-- **Latest Version ID:** `dc705f41-df14-4ed7-a0f0-8500d9913496`
-- **Bundle:** 812.41 KiB / gzip 157.92 KiB (well under the 3 MB free-tier limit).
-- **History:** health-only `1c617d76` (21.57 KiB) → Supabase `c8bf8655` (747.51 KiB) →
-  auth+CRUD `dc705f41` (812.41 KiB).
+- **Endpoints:** `GET /health`, `GET /db-check`, `GET|POST /tasks`, `PATCH /tasks/:id`,
+  `POST /transcribe`; unknown paths → `404`, missing token → `401`.
+- **Latest Version ID:** `7aaf97ce-1e12-4102-b579-656a79f9c583`
+- **Bundle:** 1256.47 KiB / gzip 241.37 KiB (under the 3 MB free-tier limit).
+- **History:** health-only `1c617d76` → Supabase `c8bf8655` → auth+CRUD `dc705f41` →
+  voice pipeline `7aaf97ce`.
