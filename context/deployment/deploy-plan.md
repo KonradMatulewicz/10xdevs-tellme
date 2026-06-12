@@ -56,21 +56,33 @@ npx wrangler tail --format pretty                                  # confirm the
 
 - Record the live `*.workers.dev` URL back into this file once deployed.
 
-## Deferred to a later session (explicitly NOT in this deploy)
+## Supabase connectivity — DONE (2026-06-12)
 
-- Supabase client wired with the native-`fetch` override
-  (`createClient(url, key, { global: { fetch } })`) and full auth flow tested via
-  `wrangler dev --remote` against a real Supabase project — the load-bearing risk from the
-  cross-check.
-- Secrets: `wrangler secret put SUPABASE_URL` / `SUPABASE_ANON_KEY` (+ a root `.env.example`
-  documenting both the EAS and Wrangler secret sets).
+The #1 cross-check risk is de-risked. `@supabase/supabase-js@2.108` is wired via
+`backend/src/supabase.ts` with the load-bearing `{ global: { fetch } }` override (publishable
+key, not `service_role`; RLS enforces per-user access). A minimal `public.tasks` table + RLS
+policy was created. The `GET /db-check` probe returns `200 {"ok":true,"rows":0,"error":null}`
+**both** under `wrangler dev --remote` (real `workerd` edge) and on the live URL — proving the
+fetch override, network egress, and the anon-key/RLS path all work. Production secrets
+(`SUPABASE_URL`, `SUPABASE_ANON_KEY`) are set via `wrangler secret put`; local dev reads
+`backend/.dev.vars` (gitignored). Both secret systems are documented in root `.env.example`.
+
+## Still deferred to a later session
+
+- Auth: register / login (email-password + Google OAuth), JWT forwarding so RLS scopes
+  queries to the authenticated user.
+- Full task CRUD + the To-Do / Done / Deleted state model and keyword search.
 - A `staging` environment in `wrangler.toml` and GitHub Actions branch-deploy.
 - Budgeting the $5/mo Paid plan before real password auth lands (10 ms free-tier CPU cap).
 
 ## Live result
 
-- **Status:** ✅ deployed and verified.
+- **Status:** ✅ Supabase wired, deployed, and verified.
 - **Deployed URL:** https://tellme-backend.konrad-matulewicz1.workers.dev
-- **Verified:** `GET /health` → `200 {"ok":true}`; unknown paths → `404`.
-- **Version ID:** `1c617d76-10f9-4032-b7e1-d4caed214095`
-- **Deployed at:** 2026-06-12 (Worker startup 11 ms; upload 21.57 KiB / gzip 5.37 KiB).
+- **Endpoints:** `GET /health` → `200 {"ok":true}`; `GET /db-check` →
+  `200 {"ok":true,"rows":0,"error":null}`; unknown paths → `404`.
+- **Latest Version ID:** `c8bf8655-57b7-4a59-b9d8-4235e4adba25`
+- **Bundle:** 747.51 KiB / gzip 142.56 KiB (well under the 3 MB free-tier limit).
+- **Deployed at:** 2026-06-12.
+- **First deploy (health-only):** Version `1c617d76-10f9-4032-b7e1-d4caed214095`,
+  21.57 KiB / gzip 5.37 KiB.

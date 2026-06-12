@@ -13,5 +13,8 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260612.1",
     "wrangler": "^4.100.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.1"
   }
 }

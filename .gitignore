@@ -33,6 +33,14 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Wrangler local dev secrets (backend/.dev.vars)
+.dev.vars
+**/.dev.vars
+
+# Wrangler build cache / temp
+.wrangler/
+**/.wrangler/
+
 # typescript
 *.tsbuildinfo
 
