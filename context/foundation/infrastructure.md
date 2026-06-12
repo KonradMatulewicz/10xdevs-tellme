@@ -10,102 +10,121 @@ tech_stack:
   runtime: Cloudflare Workers (workerd + nodejs_compat)
 ---
 
+> **Revision note.** Revised 2026-06-11 after a full developer interview and a fresh
+> parallel web-research re-run across all six candidates. It **reaffirms Cloudflare Workers**
+> (5/5). Two things changed materially from the prior version: (1) the Supabase-on-`workerd`
+> risk is now characterized as a _documented one-line fetch override_ rather than open-ended
+> debugging; (2) the interview answer **single-region** surfaced a genuine tension — Workers'
+> edge model earns the least in exactly this case, making Railway (plain Node, ~$5/mo, zero
+> `workerd` tax) a stronger runner-up than first implied. The developer reviewed that tension
+> and chose to proceed with Workers. Prior version: git `c61f955`.
+
 ## Recommendation
 
 **Deploy the backend API on Cloudflare Workers.**
 
-Cloudflare Workers scored 5/5 on all agent-friendly criteria and is the only candidate with a genuinely $0 cost at MVP traffic levels (100k requests/day free tier). The backend is a stateless TypeScript REST API handling auth, AI transcription relay, and task CRUD — a workload that maps perfectly to a serverless fetch-handler model. The AI transcription calls are external HTTP requests whose I/O wait time does not count toward the 10ms free-tier CPU budget, making the tight CPU limit non-binding for this architecture. The developer accepted the cross-check risks (Supabase JS compat, `workerd` learning curve) as manageable.
+Cloudflare Workers scored 5/5 on all five agent-friendly criteria and is the only candidate genuinely free at MVP traffic (100k requests/day free tier; this app's 10k–100k requests/**month** sits well inside it). The backend is a stateless TypeScript REST API — auth, AI transcription relay, and task CRUD — which maps cleanly onto a serverless fetch-handler model. The AI transcription calls are external HTTP requests whose I/O wait does **not** count against the 10ms free-tier CPU budget, so the tight CPU limit is non-binding for relay/CRUD work. The decisive tie-breaker is developer familiarity: Cloudflare is the platform the developer already knows (interview Q3), so the `workerd` learning surface — the one real cost here — is largely already paid.
 
-Note: The mobile app itself deploys via EAS Build → App Store (already locked in `tech-stack.md`). This file covers the backend API only.
+Note: The mobile app itself deploys via EAS Build → App Store (locked in `tech-stack.md`). This file covers the **backend API only**.
 
 ## Platform Comparison
 
 | Platform               | CLI-first  | Managed/Serverless | Agent-readable docs | Stable deploy API | MCP / Integration | Score   |
 | ---------------------- | ---------- | ------------------ | ------------------- | ----------------- | ----------------- | ------- |
 | **Cloudflare Workers** | ✅ Pass    | ✅ Pass            | ✅ Pass             | ✅ Pass           | ✅ Pass           | **5/5** |
-| Railway                | ✅ Pass    | ✅ Pass            | ⚡ Partial          | ✅ Pass           | ⚡ Partial        | 4/5     |
+| Railway                | ✅ Pass    | ✅ Pass            | ✅ Pass             | ✅ Pass           | ⚡ Partial        | 4/5     |
 | Render                 | ⚡ Partial | ✅ Pass            | ✅ Pass             | ✅ Pass           | ✅ Pass           | 4/5     |
 | Vercel                 | ✅ Pass    | ✅ Pass            | ✅ Pass             | ✅ Pass           | ⚡ Partial        | 4/5     |
 | Netlify                | ⚡ Partial | ✅ Pass            | ✅ Pass             | ⚡ Partial        | ✅ Pass           | 3/5     |
 | Fly.io                 | ✅ Pass    | ⚡ Partial         | ⚡ Partial          | ✅ Pass           | ⚡ Partial        | 3/5     |
 
+Per-platform notes (from the 2026-06-11 research):
+
+- **Cloudflare Workers** — `wrangler deploy` / `wrangler rollback [version-id]` (instant 100% revert) / `wrangler tail` cover the full ops loop from the terminal. Docs published as `llms.txt` + per-product `llms-full.txt` with a dedicated docs-for-agents portal. `nodejs_compat` (GA, ≥ compat date 2024-09-23) plus unenv polyfills the Node APIs an auth + HTTP-relay API needs (`crypto`, `buffer`, `http/https`, `stream`). GA managed MCP servers (OAuth, Claude-compatible). D1/KV/R2/Queues all GA but unused here (DB is external Supabase).
+- **Railway** — Railpack build (GA; Nixpacks now maintenance-mode) deploys a standard Node app with **no Dockerfile**, eliminating every `workerd` compat concern. `railway up --ci` / `railway redeploy` / `railway logs` are scriptable; rollback = redeploy a prior deployment. `llms.txt` + per-page `.md` published (docs upgraded to Pass vs prior run). ~$5/mo flat (Hobby includes $5 usage credit). MCP server is official but **explicitly documented as a work in progress (beta, 2026-06-11)** → Partial. **The no-rewrite fallback if `workerd` friction exceeds the 2-week budget.**
+- **Render** — Native Node Web Service, always-on **$7/mo Starter** (skip the free tier — 30–60s cold starts after 15-min idle disqualify it for a mobile backend). `render deploys create --wait -o json` + deploy hooks + REST are scriptable, but **rollback has no CLI command** (dashboard or REST API only) → CLI Partial. Full `llms.txt`; GA `render-oss/render-mcp-server`.
+- **Vercel** — Standalone Node functions deploy without Next.js; Fluid compute (default since 2025-04-23) gives 300s duration on Hobby and I/O wait is unbilled, so audio relay is _not_ a duration problem. But **Hobby is non-commercial** (a real product needs Pro at $20/seat/mo) and there's a **4.5 MB request-body cap** (`413 FUNCTION_PAYLOAD_TOO_LARGE`) — awkward for an audio-upload backend (stream large audio out-of-band). MCP is read-only public beta → Partial. Drops below Railway/Render for _this_ workload despite the 4/5.
+- **Netlify** — Functions run Node/TS, but synchronous timeout is **10s default / 26s Pro on request**; long Whisper relays need Background Functions (15 min, GA) which return `202` and **cannot return a response to the caller** — a real architectural fork for the AI pipeline. `netlify deploy` is **draft-by-default** (`--prod` required), rollback is UI-only, and Sept-2025 credit billing obscures cost forecasting → two Partials. Official `@netlify/mcp` is solid (Pass).
+- **Fly.io** — Everything is a container/microVM (auto-generated Dockerfile via `fly launch`, but a build layer always exists; default 256 MB can OOM Node) → Managed Partial. **No free tier for orgs created after 2024-10-07** (~$2/mo pay-as-you-go, auto-stop cold starts). No confirmed `llms.txt` → Docs Partial. `fly mcp server` is recent/unlabeled → MCP Partial.
+
 ### Shortlisted Platforms
 
 #### 1. Cloudflare Workers (Recommended)
 
-Perfect 5/5 score. Genuinely free at MVP scale (100k requests/day, no charge for I/O wait). TypeScript is a first-class citizen. `wrangler` CLI covers deploy, rollback, and log tailing without a dashboard. Docs published as `llms.txt` and `llms-full.txt` with per-page markdown. GA MCP server ecosystem. The primary risks (Supabase JS compat, `workerd` != Node.js) are documented and manageable with version pinning and early testing.
+Perfect 5/5. Genuinely free at this scale (100k req/day; I/O wait doesn't burn CPU-ms). TypeScript first-class. `wrangler` covers deploy, instant rollback, and log tailing with no dashboard. Docs are `llms.txt`-native. GA MCP ecosystem. The single significant risk — `@supabase/supabase-js` on `workerd` — is a **documented one-line fix** (pass native `fetch` into `createClient`). And it's the platform the developer already knows, so the runtime-model tax is mostly pre-paid.
 
 #### 2. Railway
 
-4/5 score, $5/month flat (Hobby plan includes $5 compute credit — low-traffic APIs typically stay within this). Zero-config Railpack build handles TypeScript natively — no Dockerfile required. Standard Node.js runtime eliminates all `workerd` compat concerns, making it the simplest option if Cloudflare friction is higher than anticipated. Scale-to-zero available (cold start returns 502 on first hit after idle — acceptable for dev; set `min_machines_running = 1` for production). MCP server is official but labeled "work in progress" (beta as of 2026-06-11). No published `llms.txt`. **Fallback recommendation** if Workers compat issues block progress.
+4/5, ~$5/mo flat. Standard Node runtime via Railpack (no Dockerfile, no `workerd` compat concerns) makes it the **simplest** option if Cloudflare friction runs higher than expected — migrate by copying the Express/Hono router into a plain Node server. Scale-to-zero is opt-in (cold-start 502 on first hit after idle; keep always-on for predictable latency). MCP server is official but beta/WIP; no co-location needed (Supabase is external). **Fallback recommendation** — and, given the single-region answer, a closer second than the prior run framed it.
 
 #### 3. Render
 
-4/5 score, $7/month minimum for production (free tier has 30-60s cold starts, disqualifying for a mobile backend). GA MCP server (20+ tools, open-sourced at `render-oss/render-mcp-server`). Full `llms.txt` published. CLI covers deploy and logs; rollback requires API or dashboard. The always-on $7 Starter plan is the right entry point — no cold-start surprises.
+4/5, $7/mo always-on Starter (the free tier's cold starts disqualify it for a mobile backend). GA MCP server (20+ tools), full `llms.txt`. The one rough edge: rollback is dashboard/API-only, not a CLI command, and autodeploy can silently re-restore rolled-back code on the next push.
 
 ## Anti-Bias Cross-Check: Cloudflare Workers
 
 ### Devil's Advocate — Weaknesses
 
-1. **10ms CPU time (free tier) will likely force the $5/month Paid plan.** JWT verification + JSON parsing + schema validation in auth endpoints regularly consumes 5-8ms. Bcrypt or argon2 in a password-hash flow exceeds the limit alone. The $5/month Paid plan raises the ceiling to 30s — budget for it from day one.
-2. **`workerd` is not Node.js — Supabase JS client has documented compatibility issues.** The `@supabase/supabase-js` v2 client's WebSocket and realtime modules use Node.js internals that unenv stubs only partially cover. Expect 2-4 hours of debugging and version pinning before the client works correctly in Workers.
-3. **3MB bundle limit (free) / 10MB (Paid) requires mandatory tree-shaking.** Supabase SDK + auth library + validation = 2-3MB before your own code. Run `wrangler deploy --dry-run` before the first real deploy to audit bundle size.
-4. **unenv stub failures appear at runtime, not build time.** A Node.js package that imports cleanly will throw `[unenv] X is not implemented yet` only when the specific code path executes. Write integration tests for every external library before deploying.
-5. **Wrangler version drift breaks CI.** Pin `wrangler` in `package.json` (`"wrangler": "^X.Y.Z"`) to prevent `npm ci` from pulling an incompatible CLI version.
+1. **`workerd` ≠ Node.js — the Supabase JS client needs the fetch override.** `@supabase/supabase-js` reaches for `XMLHttpRequest` via `cross-fetch` and breaks unless you pass workerd's native fetch: `createClient(url, key, { global: { fetch } })`. It's a documented pattern, but the agent will keep regenerating the vanilla client unless explicitly told (capture it in CLAUDE.md / lessons.md).
+2. **10ms free-tier CPU limit on auth endpoints.** bcrypt/argon2 password hashing alone can exceed 10ms; JWT verify + JSON parse + schema validation regularly hit 5–8ms. Budget the $5/mo Paid plan (raises CPU to 30s, up to 5 min) the moment real password auth lands.
+3. **You adopt an edge runtime for a single-region app.** The interview answer was single-region — Workers' global distribution is its headline feature, and you take on a non-Node runtime model to get a benefit your traffic doesn't need. Railway delivers the same outcome in plain Node for roughly the same money.
+4. **3 MB bundle limit (free) / 10 MB (Paid).** Supabase SDK + auth + validation can eat 2–3 MB before your own code. Run `wrangler deploy --dry-run` to audit bundle size after each major dependency.
+5. **unenv stubs fail at runtime, not build time.** A Node package that imports cleanly can throw `[unenv] X is not implemented yet` only when that code path executes. Integration-test every external library in staging before relying on it.
 
 ### Pre-Mortem — How This Could Fail
 
-The team shipped Tellme's backend to Cloudflare Workers. Month one was smooth — simple task CRUD endpoints worked perfectly under `wrangler dev`. The first sign of trouble came at week three: auth endpoints threw intermittent CPU-exceeded errors only under real request patterns, not in local testing. After two days of profiling, bcrypt was the culprit. The developer upgraded to the $5/month Paid plan — minor cost, but unexpected for a "free" platform.
-
-The bigger problem emerged at month two when integrating Supabase for user accounts and task storage. The Supabase JS client's realtime channel initialization code pulled in Node.js WebSocket internals via unenv stubs. Certain auth methods worked; others threw cryptic `not implemented yet` errors at runtime. The developer spent three days pinning specific Supabase imports and disabling realtime features that weren't needed. The agent kept regenerating standard Supabase client patterns — it wasn't aware of the Workers-specific compatibility constraints.
-
-By month three, the 3MB bundle limit was hit as AI integration code grew. Dynamic imports became necessary, breaking the agent's ability to reliably generate idiomatic code. The final regret: the developer had learned an entirely separate runtime model (Workers, `wrangler.toml`, KV/D1 bindings) instead of writing standard Node.js. For a 2-week MVP timeline, this was a material tax on velocity — Railway would have cost $5/month and eliminated all of it.
+The CRUD endpoints shipped fast and felt great under `wrangler dev`. Trouble started at the Supabase integration: the agent generated the standard client, it threw cryptic fetch errors at runtime, and two days vanished before someone found the documented fetch-override note. Password auth then tripped the 10ms CPU cap under real load — invisible in local testing — forcing the Paid plan. Minor cost, but an unplanned surprise on a "free" platform. The deeper regret surfaced at month three: the solo developer had absorbed an entire second runtime model (`workerd`, `wrangler.toml`, compat flags, bundle budgets) to ship a single-region, low-QPS API that plain Node on Railway would have run with none of that tax. For a 2-week MVP built by one person, the learning surface — not the bill — was the real cost. The mitigating fact: the developer already knew Cloudflare, so most of that surface was pre-paid; the risk is concentrated in the Supabase edge case and the CPU/bundle ceilings, not the platform model itself.
 
 ### Unknown Unknowns
 
-- **Supabase JS client + Workers = known open issue.** If Supabase is the auth/DB provider, test the full auth flow locally against a real Supabase project with `wrangler dev` before writing any other feature.
-- **Audio upload gotcha.** Workers accept up to 100MB request bodies, but streaming a buffered audio file consumes CPU time during parsing. Keep voice memo encoding to M4A/AAC (typical Expo AudioRecorder output) to minimize payload size.
-- **Free tier request counter is per Cloudflare account**, not per Worker. All Workers across all projects share the 100k/day limit.
-- **Cloudflare Workers AI ≠ this project's AI backend.** Workers AI is Cloudflare's hosted inference service. This project calls external Whisper and LLM APIs over HTTP — the developer should ignore Workers AI marketing when building the transcription pipeline.
-- **EAS secrets and Wrangler secrets are entirely separate systems.** `eas secret:create` for the mobile app and `wrangler secret put` for the API backend. Keep a local `.env.example` that documents both sets of keys so they're not lost during environment setup.
+- **Supabase + Workers is a known, fixable issue** — test the full auth flow against a real Supabase project with `wrangler dev` _before_ building anything else on top of it.
+- **Workers AI ≠ this project's AI backend.** This app calls external Whisper/LLM APIs over HTTP; ignore Cloudflare Workers AI marketing entirely when building the transcription pipeline.
+- **Free-tier 100k req/day is per Cloudflare _account_, not per Worker** — shared across every Worker in the account.
+- **Audio body handling.** Workers accept up to 100 MB request bodies, but buffering/parsing audio consumes CPU-ms; keep voice memos as compact M4A/AAC (typical Expo recorder output), and prefer direct-to-storage upload + URL relay over proxying audio bytes through the Worker.
+- **EAS secrets and Wrangler secrets are entirely separate systems** (`eas secret:create` for the app vs `wrangler secret put` for the API). Keep a root `.env.example` documenting both sets so neither is lost during environment setup.
 
 ## Operational Story
 
-- **Preview deploys**: `wrangler deploy --env staging` deploys to a named environment. No automatic PR preview URLs (unlike Vercel/Netlify) — set up a `staging` environment in `wrangler.toml` and deploy manually or via GitHub Actions on branch push.
-- **Secrets**: `wrangler secret put SECRET_NAME` — prompts for value, stores in Cloudflare's encrypted secrets vault per Worker per environment. Secrets are not visible after creation, only writable. Rotation: `wrangler secret put` overwrites the old value.
-- **Rollback**: `wrangler rollback` (defaults to the version before latest) or `wrangler rollback <VERSION_ID>` for a specific version. Typical time-to-revert: < 30 seconds. Database state (external Supabase) does not roll back — only the Worker code version rolls back.
-- **Approval**: An agent may run `wrangler deploy`, `wrangler tail`, `wrangler secret put` unattended. A human must approve: production secret rotation, billing plan changes, domain routing changes, and any deletion of Workers or KV namespaces.
-- **Logs**: `wrangler tail [WORKER_NAME] --format pretty` for real-time tailing. `wrangler tail --status error` to filter errors only. Logs are not persisted beyond the tail session on the free/Paid plan — Logpush (Enterprise) adds log persistence. For structured log retention, pipe errors to an external sink (e.g., Sentry free tier).
+- **Preview deploys**: `wrangler deploy --env staging` deploys to a named environment. No automatic per-PR preview URLs (unlike Vercel/Netlify) — define a `staging` environment in `wrangler.toml` and deploy on branch push via GitHub Actions, or manually.
+- **Secrets**: `wrangler secret put SECRET_NAME` prompts for the value and stores it in Cloudflare's encrypted per-Worker, per-environment vault. Secrets are write-only after creation (not readable back). Rotation: `wrangler secret put` overwrites the prior value.
+- **Rollback**: `wrangler rollback` (defaults to the version before latest) or `wrangler rollback <VERSION_ID>` for a specific version; typical revert < 30s. External Supabase DB state does **not** roll back — only the Worker code version does.
+- **Approval**: An agent may run `wrangler deploy`, `wrangler tail`, and `wrangler secret put` unattended. A human must approve: production secret rotation, billing-plan changes, domain/route changes, and any deletion of Workers or KV namespaces.
+- **Logs**: `wrangler tail [WORKER_NAME] --format pretty` for real-time tailing; `wrangler tail --status error` to filter errors. Tail logs are not persisted beyond the session on free/Paid — pipe errors to an external sink (e.g. Sentry free tier) for retention.
 
 ## Risk Register
 
-| Risk                                                                       | Source                              | Likelihood | Impact | Mitigation                                                                                                                                           |
-| -------------------------------------------------------------------------- | ----------------------------------- | ---------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Free-tier 10ms CPU limit hit in auth endpoint (bcrypt/JWT + validation)    | Devil's advocate                    | High       | Low    | Budget $5/month Paid plan from day one; CPU limit becomes 30s                                                                                        |
-| Supabase JS client compat issues in `workerd`                              | Devil's advocate + Unknown unknowns | Medium     | High   | Test full Supabase auth flow with `wrangler dev` before writing other features; pin `@supabase/supabase-js` to a known-good version                  |
-| Bundle size exceeds 3MB (free) on adding Supabase + auth + validation deps | Devil's advocate                    | Medium     | Medium | Run `wrangler deploy --dry-run` after adding each major dependency; upgrade to Paid ($5/mo) for 10MB limit                                           |
-| unenv stub failures appearing at runtime, not build time                   | Devil's advocate                    | Medium     | Medium | Add integration test for every external npm dependency before deploying; catch failures in staging                                                   |
-| Wrangler version drift breaking CI                                         | Devil's advocate                    | Low        | Medium | Pin `wrangler` version in `devDependencies`; use `npm ci` in CI pipeline                                                                             |
-| Pre-mortem: cumulative `workerd` friction exceeding 2-week MVP timeline    | Pre-mortem                          | Medium     | High   | Fallback plan: Railway (runner-up) requires no runtime model change — migrate by copying the Express/Hono router code into a standard Node.js server |
-| Audio streaming CPU timeout on slow connections                            | Unknown unknowns                    | Low        | Medium | Test with M4A encoded audio (compact); add explicit `Content-Type` validation to reject unexpected formats early                                     |
-| EAS secrets / Wrangler secrets environment confusion                       | Unknown unknowns                    | Medium     | Low    | Document both secret sets in `.env.example` at project root                                                                                          |
+| Risk                                                                           | Source                              | Likelihood | Impact | Mitigation                                                                                                                                                |
+| ------------------------------------------------------------------------------ | ----------------------------------- | ---------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Supabase JS client fails on `workerd` (XMLHttpRequest via cross-fetch)         | Devil's advocate + Unknown unknowns | Medium     | High   | Pass native fetch: `createClient(url, key, { global: { fetch } })`; enable `nodejs_compat`; test full auth flow with `wrangler dev` before other features |
+| Free-tier 10ms CPU limit hit in auth endpoint (bcrypt/argon2 + JWT + validate) | Devil's advocate                    | High       | Low    | Budget the $5/mo Paid plan from day one (CPU rises to 30s–5min)                                                                                           |
+| Bundle exceeds 3MB (free) after adding Supabase + auth + validation deps       | Devil's advocate                    | Medium     | Medium | `wrangler deploy --dry-run` after each major dependency; Paid plan raises the limit to 10MB                                                               |
+| unenv stub failures surfacing at runtime, not build time                       | Devil's advocate                    | Medium     | Medium | Integration-test every external npm dependency in staging before relying on it                                                                            |
+| Single-region app pays `workerd` learning tax for an edge it doesn't use       | Devil's advocate + Pre-mortem       | Medium     | Medium | Familiarity (Q3) largely pre-pays the tax; if friction exceeds the 2-week budget, fall back to Railway (plain Node, copy the router, ~$5/mo)              |
+| Cumulative `workerd` friction exceeding the 2-week MVP timeline                | Pre-mortem                          | Low–Medium | High   | Fallback: Railway (runner-up) needs no runtime-model change — migrate by copying the Express/Hono router into a standard Node server                      |
+| Audio streaming burns CPU-ms / hits body limits on slow uploads                | Unknown unknowns                    | Low        | Medium | Use compact M4A/AAC; validate `Content-Type` early; prefer direct-to-storage upload + URL relay over proxying bytes through the Worker                    |
+| EAS secrets / Wrangler secrets environment confusion                           | Unknown unknowns                    | Medium     | Low    | Document both secret sets in a root `.env.example`                                                                                                        |
+| Wrangler version drift breaking CI                                             | Research finding                    | Low        | Medium | Pin `wrangler` in `devDependencies`; use `npm ci` in CI                                                                                                   |
 
 ## Getting Started
 
-1. **Install and authenticate Wrangler:**
+> Validate these against the exact tool versions you install — Wrangler and the Workers
+> compat surface move fast. Confirm the current `nodejs_compat` flag name and compat-date
+> behavior in the docs before relying on the snippet below.
+
+1. **Install and authenticate Wrangler (pin it):**
 
    ```bash
    npm install --save-dev wrangler
    npx wrangler login
    ```
 
-2. **Create a new Worker project targeting the existing TypeScript repo:**
+2. **Scaffold the backend Worker in the repo:**
 
    ```bash
    npx wrangler init backend --no-delegate-c3
    ```
 
-   This generates `wrangler.toml`, updates `package.json`, and scaffolds a `src/index.ts` fetch handler.
+   Generates `wrangler.toml`, updates `package.json`, and scaffolds a `src/index.ts` fetch handler.
 
 3. **Enable Node.js compatibility in `wrangler.toml`:**
 
@@ -114,19 +133,24 @@ By month three, the 3MB bundle limit was hit as AI integration code grew. Dynami
    compatibility_date = "2024-09-23"
    ```
 
-4. **Run locally against real environment variables:**
+4. **Wire the Supabase client with the native-fetch override** (the load-bearing fix) and test it against a real Supabase project early:
 
-   ```bash
-   npx wrangler dev --remote
+   ```ts
+   import { createClient } from '@supabase/supabase-js';
+   export const supabase = (env: Env) =>
+     createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+       global: { fetch }, // workerd's native fetch — avoids the cross-fetch/XMLHttpRequest break
+     });
    ```
 
-   `--remote` runs against the actual Cloudflare edge rather than a local emulator — use this when testing Supabase auth integration.
+5. **Run locally against the real edge, add secrets, deploy:**
 
-5. **Deploy to production:**
    ```bash
+   npx wrangler dev --remote          # runs on Cloudflare's edge — use for Supabase auth testing
+   npx wrangler secret put SUPABASE_URL
+   npx wrangler secret put SUPABASE_ANON_KEY
    npx wrangler deploy
    ```
-   Add secrets before the first deploy: `npx wrangler secret put SUPABASE_URL`, `npx wrangler secret put SUPABASE_ANON_KEY`, etc.
 
 ## Out of Scope
 
@@ -135,4 +159,4 @@ The following were not evaluated in this research:
 - Docker image configuration
 - CI/CD pipeline setup (GitHub Actions wiring)
 - Production-scale architecture (multi-region, HA, DR)
-- EAS Build configuration (covered by tech-stack.md)
+- EAS Build configuration (covered by `tech-stack.md`)

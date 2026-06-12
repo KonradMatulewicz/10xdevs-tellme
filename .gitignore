@@ -44,3 +44,6 @@ example
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Vendored starter scaffolds (research lens, not app source)
+tools/
