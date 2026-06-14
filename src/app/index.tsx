@@ -1,98 +1,237 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
+import { Redirect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
+import { RecordButton, type RecordState } from '@/components/record-button';
+import { Segmented } from '@/components/segmented';
+import { TaskCard } from '@/components/task-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { fetchTasks, transcribe, updateTask } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import type { Task, TaskStatus } from '@/types';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+const TABS: { value: TaskStatus; label: string }[] = [
+  { value: 'todo', label: 'To-Do' },
+  { value: 'done', label: 'Done' },
+  { value: 'deleted', label: 'Deleted' },
+];
+
+type Patch = { text?: string; status?: TaskStatus };
 
 export default function HomeScreen() {
+  const { session, loading: authLoading, signOut } = useAuth();
+  const theme = useTheme();
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+
+  const [status, setStatus] = useState<TaskStatus>('todo');
+  const [query, setQuery] = useState('');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [recordState, setRecordState] = useState<RecordState>('idle');
+  const [banner, setBanner] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setListLoading(true);
+      setTasks(await fetchTasks(status, query.trim() || undefined));
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Could not load tasks');
+    } finally {
+      setListLoading(false);
+    }
+  }, [status, query]);
+
+  useEffect(() => {
+    if (!session) return;
+    const t = setTimeout(load, 250); // debounce search + react to tab changes
+    return () => clearTimeout(t);
+  }, [session, load]);
+
+  // Hooks above run unconditionally; gate rendering below.
+  if (authLoading) {
+    return (
+      <ThemedView style={styles.center}>
+        <ActivityIndicator color={theme.accent} />
+      </ThemedView>
+    );
+  }
+  if (!session) return <Redirect href="/sign-in" />;
+
+  const onRecord = async () => {
+    if (recordState === 'recording') {
+      setRecordState('busy');
+      try {
+        await recorder.stop();
+        if (!recorder.uri) throw new Error('No recording captured');
+        const { tasks: added } = await transcribe(recorder.uri);
+        setBanner(
+          added.length
+            ? `Added ${added.length} task${added.length > 1 ? 's' : ''}`
+            : 'No tasks detected — try again',
+        );
+        setStatus('todo');
+        await load();
+      } catch (e) {
+        setBanner(e instanceof Error ? e.message : 'Something went wrong');
+      } finally {
+        setRecordState('idle');
+      }
+      return;
+    }
+
+    const perm = await AudioModule.requestRecordingPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Microphone needed', 'Enable microphone access to record voice notes.');
+      return;
+    }
+    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    await recorder.prepareToRecordAsync();
+    recorder.record();
+    setBanner(null);
+    setRecordState('recording');
+  };
+
+  const onUpdate = async (id: string, patch: Patch) => {
+    // Optimistic: drop it from view if it moved tabs, else patch in place.
+    setTasks((prev) =>
+      prev.flatMap((t) => {
+        if (t.id !== id) return [t];
+        if (patch.status && patch.status !== status) return [];
+        return [{ ...t, ...patch }];
+      }),
+    );
+    try {
+      await updateTask(id, patch);
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Update failed');
+      load(); // reconcile with server truth
+    }
+  };
+
+  const recordLabel =
+    recordState === 'recording'
+      ? 'Recording… tap to stop'
+      : recordState === 'busy'
+        ? 'Transcribing…'
+        : 'Tap to capture a voice note';
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
+    <ThemedView style={styles.fill}>
+      <SafeAreaView style={styles.fill} edges={['top']}>
+        <View style={styles.header}>
+          <View>
+            <ThemedText type="subtitle">Tellme</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Speak it. We’ll list it.
+            </ThemedText>
+          </View>
+          <Pressable onPress={signOut} hitSlop={8}>
+            <ThemedText type="smallBold" style={{ color: theme.accent }}>
+              Sign out
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        <View style={styles.hero}>
+          <RecordButton state={recordState} onPress={onRecord} />
+          <ThemedText type="small" themeColor="textSecondary">
+            {recordLabel}
           </ThemedText>
-        </ThemedView>
+        </View>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+        {banner && (
+          <Pressable
+            onPress={() => setBanner(null)}
+            style={[styles.banner, { backgroundColor: theme.accentSoft }]}
+          >
+            <ThemedText type="smallBold" style={{ color: theme.accent }}>
+              {banner}
+            </ThemedText>
+          </Pressable>
+        )}
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
+        <View style={styles.controls}>
+          <Segmented options={TABS} value={status} onChange={setStatus} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search tasks"
+            placeholderTextColor={theme.textSecondary}
+            style={[styles.search, { backgroundColor: theme.backgroundElement, color: theme.text }]}
           />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+        </View>
 
-        {Platform.OS === 'web' && <WebBadge />}
+        <FlatList
+          data={tasks}
+          keyExtractor={(t) => t.id}
+          renderItem={({ item }) => <TaskCard task={item} onUpdate={(p) => onUpdate(item.id, p)} />}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={{ height: Spacing.two }} />}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            listLoading ? (
+              <ActivityIndicator color={theme.accent} style={{ marginTop: Spacing.five }} />
+            ) : (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
+                {emptyText(status)}
+              </ThemedText>
+            )
+          }
+        />
       </SafeAreaView>
     </ThemedView>
   );
 }
 
+function emptyText(status: TaskStatus) {
+  if (status === 'todo') return 'No to-dos yet. Tap record and say what you need to do.';
+  if (status === 'done') return 'Nothing completed yet.';
+  return 'Nothing deleted.';
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
+  fill: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  header: {
     flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+    paddingTop: Spacing.two,
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
+  hero: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.four },
+  banner: {
+    marginHorizontal: Spacing.four,
+    marginBottom: Spacing.three,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.md,
+    alignItems: 'center',
   },
+  controls: { paddingHorizontal: Spacing.four, gap: Spacing.three },
+  search: {
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    fontSize: 15,
+  },
+  listContent: {
+    padding: Spacing.four,
+    paddingTop: Spacing.three,
+    gap: Spacing.two,
+  },
+  empty: { textAlign: 'center', marginTop: Spacing.five, paddingHorizontal: Spacing.four },
 });
