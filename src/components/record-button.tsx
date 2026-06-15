@@ -1,14 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import Animated, {
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
 
 import { Brand, Radius } from '@/constants/theme';
 
@@ -16,29 +7,12 @@ export type RecordState = 'idle' | 'recording' | 'busy';
 
 const SIZE = 96;
 
+// NOTE: Reanimated temporarily removed to isolate an iOS-only freeze. The pulse
+// ring is static for now; restore the animation once the root cause is fixed.
 export function RecordButton({ state, onPress }: { state: RecordState; onPress: () => void }) {
-  const pulse = useSharedValue(0);
-
-  useEffect(() => {
-    if (state === 'recording') {
-      pulse.value = withRepeat(
-        withTiming(1, { duration: 1200, easing: Easing.out(Easing.ease) }),
-        -1,
-      );
-    } else {
-      cancelAnimation(pulse);
-      pulse.value = 0;
-    }
-  }, [pulse, state]);
-
-  const ringStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + pulse.value * 0.55 }],
-    opacity: 0.35 * (1 - pulse.value),
-  }));
-
   return (
     <View style={styles.wrap}>
-      <Animated.View style={[styles.ring, ringStyle]} pointerEvents="none" />
+      <View style={styles.ring} pointerEvents="none" />
       <Pressable onPress={onPress} disabled={state === 'busy'} hitSlop={12}>
         <LinearGradient
           colors={state === 'recording' ? [Brand.recording, '#FF8FB0'] : Brand.gradient}
@@ -70,6 +44,8 @@ const styles = StyleSheet.create({
     height: SIZE,
     borderRadius: SIZE / 2,
     backgroundColor: Brand.recording,
+    opacity: 0.35,
+    pointerEvents: 'none',
   },
   button: {
     width: SIZE,

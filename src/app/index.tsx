@@ -92,16 +92,22 @@ export default function HomeScreen() {
       return;
     }
 
-    const perm = await AudioModule.requestRecordingPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Microphone needed', 'Enable microphone access to record voice notes.');
-      return;
+    setBanner('Starting…'); // immediate confirmation the tap registered
+    try {
+      const perm = await AudioModule.requestRecordingPermissionsAsync();
+      if (!perm.granted) {
+        setBanner(null);
+        Alert.alert('Microphone needed', 'Enable microphone access to record voice notes.');
+        return;
+      }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setBanner(null);
+      setRecordState('recording');
+    } catch (e) {
+      setBanner(`Record error: ${e instanceof Error ? e.message : String(e)}`);
     }
-    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    await recorder.prepareToRecordAsync();
-    recorder.record();
-    setBanner(null);
-    setRecordState('recording');
   };
 
   const onUpdate = async (id: string, patch: Patch) => {
@@ -147,7 +153,7 @@ export default function HomeScreen() {
 
         <View style={styles.hero}>
           <RecordButton state={recordState} onPress={onRecord} />
-          <ThemedText type="small" themeColor="textSecondary">
+          <ThemedText type="small" themeColor="textSecondary" style={styles.heroSpace}>
             {recordLabel}
           </ThemedText>
         </View>
@@ -175,6 +181,7 @@ export default function HomeScreen() {
         </View>
 
         <FlatList
+          style={styles.list}
           data={tasks}
           keyExtractor={(t) => t.id}
           renderItem={({ item }) => <TaskCard task={item} onUpdate={(p) => onUpdate(item.id, p)} />}
@@ -212,7 +219,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.two,
   },
-  hero: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.four },
+  // No `gap` here: on iOS Fabric, `gap` + `alignItems: 'center'` with children
+  // narrower than the container mis-measured the hit rect, so taps on the
+  // centered buttons landed outside it and were dropped (web kept them live).
+  // Explicit margins keep the container's bounds around its children.
+  hero: { alignItems: 'center', paddingVertical: Spacing.four },
+  heroSpace: { marginTop: Spacing.two },
   banner: {
     marginHorizontal: Spacing.four,
     marginBottom: Spacing.three,
@@ -222,6 +234,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   controls: { paddingHorizontal: Spacing.four, gap: Spacing.three },
+  list: { flex: 1 },
   search: {
     borderRadius: Radius.pill,
     paddingHorizontal: Spacing.three,

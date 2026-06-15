@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import type { Task, TaskStatus } from '@/types';
 
 import { config } from './config';
@@ -46,8 +48,14 @@ export type TranscribeResult = { transcript: string; tasks: Task[] };
 /** Upload a recorded audio file to the voice pipeline; returns saved tasks. */
 export async function transcribe(uri: string): Promise<TranscribeResult> {
   const form = new FormData();
-  // React Native FormData file shape.
-  form.append('audio', { uri, name: 'note.m4a', type: 'audio/m4a' } as unknown as Blob);
+  if (Platform.OS === 'web') {
+    // On web, uri is a blob: URL — resolve it to a real File for FormData.
+    const blob = await fetch(uri).then((r) => r.blob());
+    form.append('audio', new File([blob], 'note.webm', { type: blob.type || 'audio/webm' }));
+  } else {
+    // React Native FormData file shape.
+    form.append('audio', { uri, name: 'note.m4a', type: 'audio/m4a' } as unknown as Blob);
+  }
   const res = await fetch(`${config.apiUrl}/transcribe`, {
     method: 'POST',
     headers: await authHeader(), // let fetch set the multipart boundary

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 
 import { tasks } from './routes/tasks';
 import { transcribe } from './routes/transcribe';
@@ -8,6 +9,15 @@ import type { AppEnv, Env } from './types';
 export type { Env };
 
 const app = new Hono<AppEnv>();
+
+app.use(
+  '*',
+  cors({
+    origin: '*',
+    allowHeaders: ['Authorization', 'Content-Type'],
+    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  }),
+);
 
 // Liveness — no auth, no DB.
 app.get('/health', (c) => c.json({ ok: true }));
