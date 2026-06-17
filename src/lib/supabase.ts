@@ -8,8 +8,12 @@ import { config } from './config';
 /**
  * Supabase client for the mobile app. AsyncStorage persists the session so the
  * user stays logged in across launches; tokens auto-refresh. The publishable key
- * is public — RLS enforces per-user access. detectSessionInUrl is off (no web
- * OAuth redirect handling in the native app yet).
+ * is public — RLS enforces per-user access.
+ *
+ * flowType 'pkce' makes both Google OAuth and password-recovery redirects return
+ * a `?code=…` the app exchanges manually via exchangeCodeForSession. detectSessionInUrl
+ * stays off because that exchange is driven by the app on native (deep link), not by
+ * the Supabase client parsing a browser URL.
  */
 export const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
   auth: {
@@ -17,5 +21,6 @@ export const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    flowType: 'pkce',
   },
 });

@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "Tellme",
-    "slug": ".bootstrap-scaffold",
+    "slug": "tellme",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "bootstrapscaffold",
+    "scheme": "tellme",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"

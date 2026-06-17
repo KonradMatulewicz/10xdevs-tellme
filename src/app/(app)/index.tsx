@@ -1,10 +1,10 @@
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
-import { Redirect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -32,7 +32,7 @@ const TABS: { value: TaskStatus; label: string }[] = [
 type Patch = { text?: string; status?: TaskStatus };
 
 export default function HomeScreen() {
-  const { session, loading: authLoading, signOut } = useAuth();
+  const { signOut } = useAuth();
   const theme = useTheme();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
@@ -55,20 +55,9 @@ export default function HomeScreen() {
   }, [status, query]);
 
   useEffect(() => {
-    if (!session) return;
     const t = setTimeout(load, 250); // debounce search + react to tab changes
     return () => clearTimeout(t);
-  }, [session, load]);
-
-  // Hooks above run unconditionally; gate rendering below.
-  if (authLoading) {
-    return (
-      <ThemedView style={styles.center}>
-        <ActivityIndicator color={theme.accent} />
-      </ThemedView>
-    );
-  }
-  if (!session) return <Redirect href="/sign-in" />;
+  }, [load]);
 
   const onRecord = async () => {
     if (recordState === 'recording') {
@@ -89,6 +78,19 @@ export default function HomeScreen() {
       } finally {
         setRecordState('idle');
       }
+      return;
+    }
+
+    // iOS WebKit (and other browsers) only expose the mic in a secure context.
+    // Over a LAN IP on plain HTTP, navigator.mediaDevices is undefined, so the
+    // record path can't work — fail loudly instead of looking like a dead button.
+    if (
+      Platform.OS === 'web' &&
+      (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia)
+    ) {
+      setBanner(
+        'Voice notes need a secure (https) page. Open via a tunnel/https URL, or use the app.',
+      );
       return;
     }
 
@@ -211,7 +213,6 @@ function emptyText(status: TaskStatus) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
