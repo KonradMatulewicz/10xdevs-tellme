@@ -53,5 +53,8 @@ example
 # Claude Code local settings
 .claude/settings.local.json
 
+# MCP server config (OAuth-backed; keep out of VCS)
+.mcp.json
+
 # Vendored starter scaffolds (research lens, not app source)
 tools/
