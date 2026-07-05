@@ -8,10 +8,14 @@
     "dev:remote": "wrangler dev --remote",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail --format pretty",
-    "typegen": "wrangler types"
+    "typegen": "wrangler types",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.0",
     "@cloudflare/workers-types": "^4.20260612.1",
+    "vitest": "^4.1.9",
     "wrangler": "^4.100.0"
   },
   "dependencies": {
