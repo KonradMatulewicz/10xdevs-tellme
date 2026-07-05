@@ -73,7 +73,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const redirectTo = authRedirectUrl('auth-callback');
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo, skipBrowserRedirect: true },
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          // Google keeps its Safari session after our signOut; without this the
+          // browser auto-redirects and the user can never switch accounts.
+          queryParams: { prompt: 'select_account' },
+        },
       });
       if (error) return { error: mapAuthError(error) };
       if (!data?.url) return { error: 'Could not start Google sign-in.' };

@@ -405,26 +405,26 @@ redirect URIs must be updated to `tellme://` (handled in the Phase 3 runbook). N
 
 #### Automated
 
-- [x] 2.1 Type checking passes: `npx tsc --noEmit`
-- [x] 2.2 Linting passes: `npm run lint`
-- [x] 2.3 Unit tests pass: `npm test`
+- [x] 2.1 Type checking passes: `npx tsc --noEmit` — 154bc61
+- [x] 2.2 Linting passes: `npm run lint` — 154bc61
+- [x] 2.3 Unit tests pass: `npm test` — 154bc61
 
 #### Manual
 
-- [x] 2.4 Sign-in shows Google button + "Forgot password?" link; iOS layout intact
-- [x] 2.5 Forgot-password screen sends request and shows confirmation
-- [x] 2.6 Reset-password screen renders form with `code` param; clear error without one
+- [x] 2.4 Sign-in shows Google button + "Forgot password?" link; iOS layout intact — 154bc61
+- [x] 2.5 Forgot-password screen sends request and shows confirmation — 154bc61
+- [x] 2.6 Reset-password screen renders form with `code` param; clear error without one — 154bc61
 
 ### Phase 3: External config runbook + end-to-end verification
 
 #### Automated
 
-- [ ] 3.1 Full suite green: `npx tsc --noEmit`, `npm run lint`, `npm test`
+- [x] 3.1 Full suite green: `npx tsc --noEmit`, `npm run lint`, `npm test`
 
 #### Manual
 
-- [ ] 3.2 Google login completes in Expo Go → authenticated home, session persists
+- [x] 3.2 Google login completes in Expo Go → authenticated home, session persists
 - [ ] 3.3 Password reset completes in Expo Go, same device (request → email link → set → sign in)
-- [ ] 3.4 Cross-device reset fails gracefully (recoverable error + restart link; error string noted)
-- [ ] 3.5 Email-collision path shows mapped guidance (or verified auto-link)
-- [ ] 3.6 Cancel path leaves user on sign-in with no error
+- [x] 3.4 Cross-device reset fails gracefully (recoverable error + restart link; error string noted)
+- [x] 3.5 Email-collision path shows mapped guidance (or verified auto-link)
+- [x] 3.6 Cancel path leaves user on sign-in with no error
