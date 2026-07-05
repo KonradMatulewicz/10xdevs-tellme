@@ -392,28 +392,28 @@ redirect URIs must be updated to `tellme://` (handled in the Phase 3 runbook). N
 
 #### Automated
 
-- [x] 1.0 Test runner installed (`jest-expo`), `npm test` script added, smoke test green
-- [x] 1.1 Type checking passes: `npx tsc --noEmit`
-- [x] 1.2 Linting passes: `npm run lint`
-- [x] 1.3 Unit tests pass: `npm test`
+- [x] 1.0 Test runner installed (`jest-expo`), `npm test` script added, smoke test green — 950c015
+- [x] 1.1 Type checking passes: `npx tsc --noEmit` — 950c015
+- [x] 1.2 Linting passes: `npm run lint` — 950c015
+- [x] 1.3 Unit tests pass: `npm test` — 950c015
 
 #### Manual
 
-- [x] 1.4 App boots in Expo Go; existing email/password sign-in/out unaffected
+- [x] 1.4 App boots in Expo Go; existing email/password sign-in/out unaffected — 950c015
 
 ### Phase 2: UI & routing — Google button, forgot-password, reset screen + deep link
 
 #### Automated
 
-- [ ] 2.1 Type checking passes: `npx tsc --noEmit`
-- [ ] 2.2 Linting passes: `npm run lint`
-- [ ] 2.3 Unit tests pass: `npm test`
+- [x] 2.1 Type checking passes: `npx tsc --noEmit`
+- [x] 2.2 Linting passes: `npm run lint`
+- [x] 2.3 Unit tests pass: `npm test`
 
 #### Manual
 
-- [ ] 2.4 Sign-in shows Google button + "Forgot password?" link; iOS layout intact
-- [ ] 2.5 Forgot-password screen sends request and shows confirmation
-- [ ] 2.6 Reset-password screen renders form with `code` param; clear error without one
+- [x] 2.4 Sign-in shows Google button + "Forgot password?" link; iOS layout intact
+- [x] 2.5 Forgot-password screen sends request and shows confirmation
+- [x] 2.6 Reset-password screen renders form with `code` param; clear error without one
 
 ### Phase 3: External config runbook + end-to-end verification
 
