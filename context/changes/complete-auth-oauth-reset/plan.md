@@ -419,12 +419,12 @@ redirect URIs must be updated to `tellme://` (handled in the Phase 3 runbook). N
 
 #### Automated
 
-- [x] 3.1 Full suite green: `npx tsc --noEmit`, `npm run lint`, `npm test`
+- [x] 3.1 Full suite green: `npx tsc --noEmit`, `npm run lint`, `npm test` — 9cc8215
 
 #### Manual
 
-- [x] 3.2 Google login completes in Expo Go → authenticated home, session persists
+- [x] 3.2 Google login completes in Expo Go → authenticated home, session persists — 9cc8215
 - [ ] 3.3 Password reset completes in Expo Go, same device (request → email link → set → sign in)
-- [x] 3.4 Cross-device reset fails gracefully (recoverable error + restart link; error string noted)
-- [x] 3.5 Email-collision path shows mapped guidance (or verified auto-link)
-- [x] 3.6 Cancel path leaves user on sign-in with no error
+- [x] 3.4 Cross-device reset fails gracefully (recoverable error + restart link; error string noted) — 9cc8215
+- [x] 3.5 Email-collision path shows mapped guidance (or verified auto-link) — 9cc8215
+- [x] 3.6 Cancel path leaves user on sign-in with no error — 9cc8215
