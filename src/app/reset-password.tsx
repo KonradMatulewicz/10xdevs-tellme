@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Link, Redirect, type Href } from 'expo-router';
+import { Link, Redirect } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -17,7 +17,11 @@ import { ThemedView } from '@/components/themed-view';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
-import { extractRecoveryCode, validateNewPassword } from '@/lib/recovery';
+import {
+  extractAuthErrorDescription,
+  extractRecoveryCode,
+  validateNewPassword,
+} from '@/lib/recovery';
 import { supabase } from '@/lib/supabase';
 
 type Status = 'verifying' | 'ready' | 'error' | 'done';
@@ -27,7 +31,9 @@ export default function ResetPasswordScreen() {
   const theme = useTheme();
   // useURL covers both cold start (initial URL) and links arriving while mounted.
   const url = Linking.useURL();
-  const exchanged = useRef(false);
+  // Keyed by code value (not a boolean) so a fresh link tapped after a failed
+  // exchange still gets exchanged while this screen stays mounted.
+  const lastCode = useRef<string | null>(null);
 
   const [status, setStatus] = useState<Status>('verifying');
   const [error, setError] = useState<string | null>(null);
@@ -36,29 +42,41 @@ export default function ResetPasswordScreen() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (exchanged.current || url == null) return;
+    if (url == null) return;
     const code = extractRecoveryCode(url);
     if (!code) {
       setStatus('error');
-      setError('This reset link is invalid or missing its code. Request a new one.');
+      setError(
+        extractAuthErrorDescription(url) ??
+          'This reset link is invalid or missing its code. Request a new one.',
+      );
       return;
     }
-    exchanged.current = true;
-    supabase.auth.exchangeCodeForSession(code).then(({ error: exchangeError }) => {
-      if (exchangeError) {
+    if (lastCode.current === code) return;
+    // Set before the async call so a duplicate delivery of the same URL can't double-exchange.
+    lastCode.current = code;
+    setStatus('verifying');
+    setError(null);
+    supabase.auth
+      .exchangeCodeForSession(code)
+      .then(({ error: exchangeError }) => {
+        if (exchangeError) {
+          setStatus('error');
+          setError(
+            'This reset link could not be verified. It may have expired or been opened on a ' +
+              'different device than the one that requested it. Request a new link.',
+          );
+        } else {
+          setStatus('ready');
+        }
+      })
+      .catch(() => {
         setStatus('error');
-        setError(
-          'This reset link could not be verified. It may have expired or been opened on a ' +
-            'different device than the one that requested it. Request a new link.',
-        );
-      } else {
-        setStatus('ready');
-      }
-    });
+        setError('Something went wrong while verifying your reset link. Request a new one.');
+      });
   }, [url]);
 
-  // Home lives in the (app) group; its typed route isn't a bare "/", so cast.
-  if (status === 'done') return <Redirect href={'/' as Href} />;
+  if (status === 'done') return <Redirect href="/" />;
 
   const submit = async () => {
     setError(null);
@@ -94,6 +112,14 @@ export default function ResetPasswordScreen() {
               <ThemedText themeColor="textSecondary" style={styles.centerText}>
                 Verifying your reset link…
               </ThemedText>
+              {/* Escape hatch: without a deep-link URL this state would otherwise never resolve. */}
+              <Link href="/forgot-password" asChild>
+                <Pressable>
+                  <ThemedText type="small" themeColor="accent" style={styles.link}>
+                    Request a new link
+                  </ThemedText>
+                </Pressable>
+              </Link>
             </View>
           )}
 

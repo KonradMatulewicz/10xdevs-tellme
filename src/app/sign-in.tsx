@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Link, Redirect, type Href } from 'expo-router';
+import { Link, Redirect } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -28,8 +28,7 @@ export default function SignInScreen() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // Home lives in the (app) group; its typed route isn't a bare "/", so cast.
-  if (!loading && session) return <Redirect href={'/' as Href} />;
+  if (!loading && session) return <Redirect href="/" />;
 
   const submit = async () => {
     setError(null);

@@ -1,6 +1,6 @@
 import 'react-native-url-polyfill/auto';
 
-import { extractRecoveryCode, validateNewPassword } from '../recovery';
+import { extractAuthErrorDescription, extractRecoveryCode, validateNewPassword } from '../recovery';
 
 describe('extractRecoveryCode', () => {
   it('extracts the code from an Expo Go recovery deep link', () => {
@@ -24,6 +24,31 @@ describe('extractRecoveryCode', () => {
     expect(extractRecoveryCode(null)).toBeNull();
     expect(extractRecoveryCode(undefined)).toBeNull();
     expect(extractRecoveryCode('')).toBeNull();
+  });
+
+  it('strips a #fragment so it cannot pollute the code value', () => {
+    expect(extractRecoveryCode('tellme://reset-password?code=abc#error=denied')).toBe('abc');
+  });
+});
+
+describe('extractAuthErrorDescription', () => {
+  it('returns error_description when present', () => {
+    expect(
+      extractAuthErrorDescription(
+        'tellme://reset-password?error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired',
+      ),
+    ).toBe('Email link is invalid or has expired');
+  });
+
+  it('falls back to the error param when there is no description', () => {
+    expect(extractAuthErrorDescription('tellme://reset-password?error=access_denied')).toBe(
+      'access_denied',
+    );
+  });
+
+  it('returns null when the URL carries no error params', () => {
+    expect(extractAuthErrorDescription('tellme://reset-password?code=abc')).toBeNull();
+    expect(extractAuthErrorDescription(null)).toBeNull();
   });
 });
 

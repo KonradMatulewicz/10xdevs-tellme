@@ -1,3 +1,5 @@
+// Must load before supabase-js so PKCE verifiers come from a CSPRNG, not Math.random().
+import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';

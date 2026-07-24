@@ -1,9 +1,9 @@
 import type { Session } from '@supabase/supabase-js';
-import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { authRedirectUrl } from './auth-redirect';
+import { extractRecoveryCode } from './recovery';
 import { supabase } from './supabase';
 
 type Result = { error?: string };
@@ -46,10 +46,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setSession(data.session))
+      // A rejected read must still clear `loading`, or the (app) gate spins forever.
+      .catch(() => {})
+      .finally(() => setLoading(false));
     const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
     return () => data.subscription.unsubscribe();
   }, []);
@@ -59,50 +61,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     signIn: async (email, password) => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      return { error: error?.message };
+      return { error: error ? mapAuthError(error) : undefined };
     },
     signUp: async (email, password) => {
       const { data, error } = await supabase.auth.signUp({ email, password });
       // If email confirmation is on, signUp returns a user but no session.
-      return { error: error?.message, needsConfirmation: !error && !data.session };
+      return {
+        error: error ? mapAuthError(error) : undefined,
+        needsConfirmation: !error && !data.session,
+      };
     },
     signOut: async () => {
       await supabase.auth.signOut();
     },
     signInWithGoogle: async () => {
-      const redirectTo = authRedirectUrl('auth-callback');
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-          // Google keeps its Safari session after our signOut; without this the
-          // browser auto-redirects and the user can never switch accounts.
-          queryParams: { prompt: 'select_account' },
-        },
-      });
-      if (error) return { error: mapAuthError(error) };
-      if (!data?.url) return { error: 'Could not start Google sign-in.' };
+      try {
+        const redirectTo = authRedirectUrl('auth-callback');
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo,
+            skipBrowserRedirect: true,
+            // Google keeps its Safari session after our signOut; without this the
+            // browser auto-redirects and the user can never switch accounts.
+            queryParams: { prompt: 'select_account' },
+          },
+        });
+        if (error) return { error: mapAuthError(error) };
+        if (!data?.url) return { error: 'Could not start Google sign-in.' };
 
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      // cancel / dismiss is a user choice, not an error — return quietly.
-      if (result.type !== 'success') return {};
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        // cancel / dismiss is a user choice, not an error — return quietly.
+        if (result.type !== 'success') return {};
 
-      const code = Linking.parse(result.url).queryParams?.code;
-      if (typeof code !== 'string') return { error: 'Google sign-in did not return a code.' };
+        const code = extractRecoveryCode(result.url);
+        if (!code) return { error: 'Google sign-in did not return a code.' };
 
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-      return { error: exchangeError ? mapAuthError(exchangeError) : undefined };
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        return { error: exchangeError ? mapAuthError(exchangeError) : undefined };
+      } catch (e) {
+        // openAuthSessionAsync can reject (e.g. a concurrent auth session on Android);
+        // a thrown error must not strand the button in its busy state.
+        return { error: mapAuthError(e as { message?: string }) };
+      }
     },
     resetPassword: async (email) => {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: authRedirectUrl('reset-password'),
       });
-      return { error: error?.message };
+      return { error: error ? mapAuthError(error) : undefined };
     },
     updatePassword: async (password) => {
       const { error } = await supabase.auth.updateUser({ password });
-      return { error: error?.message };
+      return { error: error ? mapAuthError(error) : undefined };
     },
   };
 

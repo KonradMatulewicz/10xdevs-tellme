@@ -1,7 +1,7 @@
 ---
 change_id: complete-auth-oauth-reset
 title: Complete authentication — Google Sign-In + password reset
-status: implemented
+status: impl_reviewed
 created: 2026-06-17
 updated: 2026-07-05
 archived_at: null
