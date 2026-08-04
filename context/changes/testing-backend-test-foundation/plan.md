@@ -253,8 +253,8 @@ Not applicable — no data migration; `schema.sql` targets a new, separate Supab
 
 #### Automated
 
-- [x] 2.1 `npm run test` (backend) passes, including all new suites
-- [x] 2.2 `npm run typecheck` passes
+- [x] 2.1 `npm run test` (backend) passes, including all new suites — 571ffe8
+- [x] 2.2 `npm run typecheck` passes — 571ffe8
 
 #### Manual
 
