@@ -241,20 +241,20 @@ Not applicable — no data migration; `schema.sql` targets a new, separate Supab
 
 #### Automated
 
-- [x] 1.1 `cd backend && npm install` completes with no errors
-- [x] 1.2 `npm run test` passes (the one smoke test)
-- [x] 1.3 `npm run typecheck` passes with zero errors
+- [x] 1.1 `cd backend && npm install` completes with no errors — fc90f1b
+- [x] 1.2 `npm run test` passes (the one smoke test) — fc90f1b
+- [x] 1.3 `npm run typecheck` passes with zero errors — fc90f1b
 
 #### Manual
 
-- [x] 1.4 `wrangler dev` in `backend/` still starts and serves `/health` as before
+- [x] 1.4 `wrangler dev` in `backend/` still starts and serves `/health` as before — fc90f1b
 
 ### Phase 2: Routing/CRUD/validation suite (mocked Supabase)
 
 #### Automated
 
-- [ ] 2.1 `npm run test` (backend) passes, including all new suites
-- [ ] 2.2 `npm run typecheck` passes
+- [x] 2.1 `npm run test` (backend) passes, including all new suites
+- [x] 2.2 `npm run typecheck` passes
 
 #### Manual
 
