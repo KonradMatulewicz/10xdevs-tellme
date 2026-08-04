@@ -1,56 +1,40 @@
-# Welcome to your Expo app 👋
+# Tellme
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Voice memos are fast to capture but slow to act on — they need re-listening and manual transcription before anything becomes a task. Tellme closes that gap: record a voice note, and within seconds get a structured, editable task list, no manual transcription step in between.
 
-## Get started
+Full product spec: [`context/foundation/prd.md`](context/foundation/prd.md).
 
-1. Install dependencies
+## How it works
 
-   ```bash
-   npm install
-   ```
+1. **Mobile app** (this repo root, Expo Router) — record audio, view/edit tasks across To-Do / Done / Deleted tabs, search.
+2. **Backend** (`backend/`, Cloudflare Worker + Hono) — auth (Supabase), transcription (Workers AI), task extraction (Claude via `@anthropic-ai/sdk`), task CRUD.
 
-2. Start the app
+## Running it
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### Backend
 
 ```bash
-npm run reset-project
+cd backend
+npm install
+# create .dev.vars (gitignored) with SUPABASE_URL, SUPABASE_ANON_KEY, ANTHROPIC_API_KEY — see ../.env.example
+npm run dev
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Mobile app
 
-### Other setup steps
+```bash
+npm install
+npx expo start
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Open in a [development build](https://docs.expo.dev/versions/v54.0.0/develop/development-builds/introduction/), [Android emulator](https://docs.expo.dev/versions/v54.0.0/workflow/android-studio-emulator/), [iOS simulator](https://docs.expo.dev/versions/v54.0.0/workflow/ios-simulator/), or [Expo Go](https://expo.dev/go).
 
-## Learn more
+### Environment variables
 
-To learn more about developing your project with Expo, look at the following resources:
+See [`.env.example`](.env.example) — two separate secret systems (backend `.dev.vars` / `wrangler secret`, mobile `eas secret`). Don't mix them up.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Tech stack
 
-## Join the community
+Expo SDK 54 (managed workflow) + Expo Router · TypeScript · Supabase (auth) · Cloudflare Workers + Hono (backend) · Claude (task extraction) · Workers AI (transcription).
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+See [`context/foundation/tech-stack.md`](context/foundation/tech-stack.md) for the full rationale.
