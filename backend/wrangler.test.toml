@@ -1,0 +1,9 @@
+name = "tellme-backend"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Test-only config — deliberately omits the [ai] binding from wrangler.toml.
+# Workers AI always needs a live remote proxy session (even unused), which
+# requires CLOUDFLARE_API_TOKEN. No test exercises env.AI (POST /transcribe
+# isn't covered), so tests don't need the binding and CI doesn't need the token.
