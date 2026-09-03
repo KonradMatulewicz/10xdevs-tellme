@@ -9,7 +9,17 @@ export async function signIn(
   email: string,
   password: string,
 ): Promise<string> {
-  const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+  // A malformed/empty SUPABASE_URL (e.g. a misconfigured CI secret) makes
+  // fetch() throw an opaque low-level network error inside workerd — fail
+  // fast here with a message that actually points at the cause.
+  let url: URL;
+  try {
+    url = new URL(`${supabaseUrl}/auth/v1/token?grant_type=password`);
+  } catch {
+    throw new Error(`Invalid SUPABASE_URL for sign-in: ${JSON.stringify(supabaseUrl)}`);
+  }
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: { apikey: anonKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),

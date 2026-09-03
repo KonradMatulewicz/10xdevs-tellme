@@ -14,6 +14,8 @@ import { signIn } from './support/real-auth';
  * doesn't fail the whole suite over missing test fixtures.
  */
 const hasTestUsers =
+  !!env.SUPABASE_URL &&
+  !!env.SUPABASE_ANON_KEY &&
   !!env.TEST_USER_A_EMAIL &&
   !!env.TEST_USER_A_PASSWORD &&
   !!env.TEST_USER_B_EMAIL &&
