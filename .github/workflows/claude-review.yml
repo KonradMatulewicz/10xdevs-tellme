@@ -1,0 +1,20 @@
+name: Claude - automatyczne review
+on:
+  pull_request:
+    types: [opened, synchronize]
+jobs:
+  claude:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@fa2b2666b747000bf42767d1f332065b375e3c8f # v1.0.214
+        with:
+          prompt: |
+            Zrób review tego PR-a pod kątem poprawności, bezpieczeństwa i czytelności,
+            uwzględniając konwencje z CLAUDE.md tego repozytorium (Expo Router, path alias
+            @/*, React Compiler, platform variants). Dla każdego zmienionego pliku podaj
+            konkretne sugestie.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
