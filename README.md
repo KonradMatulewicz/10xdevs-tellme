@@ -35,6 +35,6 @@ See [`.env.example`](.env.example) — two separate secret systems (backend `.de
 
 ## Tech stack
 
-Expo SDK 54 (managed workflow) + Expo Router · TypeScript · Supabase (auth) · Cloudflare Workers + Hono (backend) · Claude (task extraction) · Workers AI (transcription).
+Expo SDK 57 (managed workflow) + Expo Router · TypeScript · Supabase (auth) · Cloudflare Workers + Hono (backend) · Claude (task extraction) · Workers AI (transcription).
 
 See [`context/foundation/tech-stack.md`](context/foundation/tech-stack.md) for the full rationale.
