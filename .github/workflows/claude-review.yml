@@ -22,7 +22,7 @@ jobs:
           # CI) — that's what caused 13 permission denials / $3 / 10 min on an earlier run.
           # Sonnet is also plenty for a review task; Opus was serious overkill on cost/time.
           claude_args: |
-            --model claude-sonnet-4-6
+            --model claude-sonnet-5
             --allowedTools "Read,Grep,Glob"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
