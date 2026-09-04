@@ -54,6 +54,14 @@ jobs:
           echo "TEST_USER_B_EMAIL=${{ secrets.TEST_USER_B_EMAIL }}" >> .dev.vars
           echo "TEST_USER_B_PASSWORD=${{ secrets.TEST_USER_B_PASSWORD }}" >> .dev.vars
 
+      # workerd's outbound fetch (idor.test.ts hits real Supabase) fails with
+      # "connect(): Connection refused" on GitHub's ubuntu-latest runners when it
+      # tries IPv6 first and the runner's IPv6 route is dead. Force IPv4-only.
+      - name: Disable IPv6
+        run: |
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+
       - name: Run tests
         working-directory: backend
         run: npm test
