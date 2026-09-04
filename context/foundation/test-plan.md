@@ -87,7 +87,7 @@ The classic test base for this project. AI-native tools (if any) carry a
 
 | Layer                         | Tool                                           | Version                   | Notes                                                                                     |
 | ----------------------------- | ---------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------- |
-| unit + integration (frontend) | Jest + jest-expo                               | 29 / SDK 54               | Configured in package.json; 4 tests in `src/lib/__tests__/`                               |
+| unit + integration (frontend) | Jest + jest-expo                               | 29 / SDK 57               | Configured in package.json; 4 tests in `src/lib/__tests__/`                               |
 | unit + integration (backend)  | none yet — see Phase 1                         | —                         | Cloudflare Worker has zero test runner today; Phase 1 selects a Workers-compatible runner |
 | API mocking                   | none yet — see Phase 1                         | —                         | Mock AI calls (Whisper/Claude) at the network edge for error-path tests                   |
 | e2e                           | not planned                                    | —                         | Interview Q5 explicitly excludes full OAuth e2e automation; manual smoke remains          |

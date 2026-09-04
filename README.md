@@ -27,11 +27,15 @@ npm install
 npx expo start
 ```
 
-Open in a [development build](https://docs.expo.dev/versions/v54.0.0/develop/development-builds/introduction/), [Android emulator](https://docs.expo.dev/versions/v54.0.0/workflow/android-studio-emulator/), [iOS simulator](https://docs.expo.dev/versions/v54.0.0/workflow/ios-simulator/), or [Expo Go](https://expo.dev/go).
+Open in a [development build](https://docs.expo.dev/versions/v57.0.0/develop/development-builds/introduction/), [Android emulator](https://docs.expo.dev/versions/v57.0.0/workflow/android-studio-emulator/), [iOS simulator](https://docs.expo.dev/versions/v57.0.0/workflow/ios-simulator/), or [Expo Go](https://expo.dev/go).
 
 ### Environment variables
 
-See [`.env.example`](.env.example) — two separate secret systems (backend `.dev.vars` / `wrangler secret`, mobile `eas secret`). Don't mix them up.
+See [`.env.example`](.env.example).
+
+- **Backend — required.** Create `backend/.dev.vars` (gitignored) locally, as in "Running it" above. Production uses `wrangler secret put <NAME>` per-Worker.
+- **Mobile app — optional.** `src/lib/config.ts` ships working defaults (deployed backend + Supabase project), so `npx expo start` runs with zero configuration. Override with `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` to point at a different environment.
+- **`eas secret` — not set up yet.** No `eas.json` in the repo; EAS build is planned but not built (roadmap `F-01`, still `proposed`). Once it lands, mobile build/runtime secrets go through `eas secret:create`, never through `wrangler`.
 
 ## Tech stack
 

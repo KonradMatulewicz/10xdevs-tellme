@@ -35,58 +35,62 @@ export default function ResetPasswordScreen() {
   // exchange still gets exchanged while this screen stays mounted.
   const lastCode = useRef<string | null>(null);
 
-  const [status, setStatus] = useState<Status>('verifying');
-  const [error, setError] = useState<string | null>(null);
+  const [exchangeStatus, setExchangeStatus] = useState<Status>('verifying');
+  const [exchangeError, setExchangeError] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Pure derivation from `url` — an invalid/missing code doesn't need an effect,
+  // it's just the render-time reflection of the current URL.
+  const code = url == null ? null : extractRecoveryCode(url);
+  const invalidLinkError =
+    url != null && !code
+      ? (extractAuthErrorDescription(url) ??
+        'This reset link is invalid or missing its code. Request a new one.')
+      : null;
+  const status: Status = invalidLinkError ? 'error' : exchangeStatus;
+  const error = invalidLinkError ?? exchangeError;
+
   useEffect(() => {
-    if (url == null) return;
-    const code = extractRecoveryCode(url);
-    if (!code) {
-      setStatus('error');
-      setError(
-        extractAuthErrorDescription(url) ??
-          'This reset link is invalid or missing its code. Request a new one.',
-      );
-      return;
-    }
+    if (!code) return;
     if (lastCode.current === code) return;
     // Set before the async call so a duplicate delivery of the same URL can't double-exchange.
     lastCode.current = code;
-    setStatus('verifying');
-    setError(null);
+    setExchangeStatus('verifying');
+    setExchangeError(null);
     supabase.auth
       .exchangeCodeForSession(code)
-      .then(({ error: exchangeError }) => {
-        if (exchangeError) {
-          setStatus('error');
-          setError(
+      .then(({ error: exchangeErr }) => {
+        if (exchangeErr) {
+          setExchangeStatus('error');
+          setExchangeError(
             'This reset link could not be verified. It may have expired or been opened on a ' +
               'different device than the one that requested it. Request a new link.',
           );
         } else {
-          setStatus('ready');
+          setExchangeStatus('ready');
         }
       })
       .catch(() => {
-        setStatus('error');
-        setError('Something went wrong while verifying your reset link. Request a new one.');
+        setExchangeStatus('error');
+        setExchangeError(
+          'Something went wrong while verifying your reset link. Request a new one.',
+        );
       });
-  }, [url]);
+  }, [code]);
 
   if (status === 'done') return <Redirect href="/" />;
 
   const submit = async () => {
-    setError(null);
+    setExchangeError(null);
     const validation = validateNewPassword(password, confirm);
-    if (validation) return setError(validation);
+    if (validation) return setExchangeError(validation);
     setBusy(true);
     const res = await updatePassword(password);
     setBusy(false);
-    if (res.error) return setError(res.error);
-    setStatus('done');
+    if (res.error) return setExchangeError(res.error);
+    setExchangeStatus('done');
   };
 
   return (
