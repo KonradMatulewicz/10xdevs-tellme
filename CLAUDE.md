@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project: Tellme
 
-React Native + TypeScript mobile app. Expo v54 SDK, managed workflow, single-app repo.
+React Native + TypeScript mobile app. Expo v57 SDK, managed workflow, single-app repo.
 
 ## Key conventions
 
-- **Versioned docs**: Always reference https://docs.expo.dev/versions/v54.0.0/ — not the unversioned docs.
+- **Versioned docs**: Always reference https://docs.expo.dev/versions/v57.0.0/ — not the unversioned docs.
 - **Routing**: File-based via Expo Router. Screens go under `src/app/`. Do not create a manual navigator.
 - **Platform variants**: Use `.native.tsx` / `.web.tsx` suffixes for platform-specific implementations; import the base name — Expo resolves the right file per platform.
 - **Path alias**: `@/*` maps to `src/*` (tsconfig.json). Use it — avoid `../../` relative imports from inside `src/`.

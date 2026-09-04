@@ -27,7 +27,7 @@ npm install
 npx expo start
 ```
 
-Open in a [development build](https://docs.expo.dev/versions/v54.0.0/develop/development-builds/introduction/), [Android emulator](https://docs.expo.dev/versions/v54.0.0/workflow/android-studio-emulator/), [iOS simulator](https://docs.expo.dev/versions/v54.0.0/workflow/ios-simulator/), or [Expo Go](https://expo.dev/go).
+Open in a [development build](https://docs.expo.dev/versions/v57.0.0/develop/development-builds/introduction/), [Android emulator](https://docs.expo.dev/versions/v57.0.0/workflow/android-studio-emulator/), [iOS simulator](https://docs.expo.dev/versions/v57.0.0/workflow/ios-simulator/), or [Expo Go](https://expo.dev/go).
 
 ### Environment variables
 
@@ -35,6 +35,6 @@ See [`.env.example`](.env.example) — two separate secret systems (backend `.de
 
 ## Tech stack
 
-Expo SDK 54 (managed workflow) + Expo Router · TypeScript · Supabase (auth) · Cloudflare Workers + Hono (backend) · Claude (task extraction) · Workers AI (transcription).
+Expo SDK 57 (managed workflow) + Expo Router · TypeScript · Supabase (auth) · Cloudflare Workers + Hono (backend) · Claude (task extraction) · Workers AI (transcription).
 
 See [`context/foundation/tech-stack.md`](context/foundation/tech-stack.md) for the full rationale.

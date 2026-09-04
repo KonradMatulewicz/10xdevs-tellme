@@ -40,7 +40,12 @@
         {
           "microphonePermission": "Allow Tellme to record voice notes."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
