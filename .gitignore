@@ -7,7 +7,10 @@ node_modules/
 .expo/
 dist/
 web-build/
-expo-env.d.ts
+# expo-env.d.ts is committed (not gitignored) — CI's `tsc --noEmit` never runs
+# an Expo CLI command that would regenerate it, and it's the only thing that
+# pulls in expo/types' ambient CSS-import declarations. Content is stable;
+# don't hand-edit it, but do keep it tracked.
 
 # Native
 .kotlin/
