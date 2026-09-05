@@ -4,65 +4,65 @@ type: map-artifact
 created: 2026-09-04
 ---
 
-# Artifact 1 — Terytorium (historia gita)
+# Artifact 1 — Territory (git history)
 
-**Scope note:** 43 commitów, 2026-06-10 → dziś (~3 miesiące), jeden autor pod dwiema tożsamościami gita (`Konrad Matulewicz` / `Konrad.M` — ta sama osoba). Za mało historii i za mało ludzi na kwartalny trend albo realną mapę kontrybutorów — patrz `artifact-3-contributors.md` dla wprost nazwanego ograniczenia. To, co historia i tak dobrze pokazuje na tej skali: gdzie skupiła się praca i co zmienia się razem.
+**Scope note:** 43 commits, 2026-06-10 → today (~3 months), one author under two git identities (`Konrad Matulewicz` / `Konrad.M` — the same person). Too little history and too few people for a quarterly trend or a real contributor map — see `artifact-3-contributors.md` for that limitation named explicitly. What history still shows well at this scale: where work concentrated and what changes together.
 
-## Top zmieniane pliki (cała historia, bez szumu)
+## Most-changed files (whole history, noise filtered)
 
-Odfiltrowane: `package-lock.json`, `.wrangler/`, `dist/`, `Prework/` (materiały kursowe, nie kod appki), `.claude/skills/`, `.claude/prompts/` (toolkit, nie domena).
+Filtered out: `package-lock.json`, `.wrangler/`, `dist/`, `Prework/` (course material, not app code), `.claude/skills/`, `.claude/prompts/` (toolkit, not domain).
 
-| #   | Plik                                                         | Zmiany | Komentarz                                         |
-| --- | ------------------------------------------------------------ | ------ | ------------------------------------------------- |
-| 1   | `CLAUDE.md`                                                  | 8      | root instrukcji — rośnie z każdą fazą projektu    |
-| 2   | `package.json`                                               | 7      | zależności frontendu                              |
-| 3   | `.github/workflows/claude-review.yml`                        | 6      | CI/AI review, dostrajane                          |
-| 4   | `src/components/animated-icon.tsx`                           | 5      | **usunięty** — martwy scaffold Expo (patrz niżej) |
-| 5   | `backend/src/index.ts`                                       | 5      | entry point Workera                               |
-| 6   | `backend/package.json`                                       | 5      | zależności backendu                               |
-| 7   | `app.json`                                                   | 5      | konfiguracja Expo                                 |
-| 8   | `src/lib/auth.tsx`                                           | 4      | provider auth (frontend)                          |
-| 9   | `src/components/ui/collapsible.tsx`                          | 4      | **usunięty** — scaffold                           |
-| 10  | `src/app/_layout.tsx`                                        | 4      | root layout / auth gate                           |
-| 11  | `context/changes/complete-auth-oauth-reset/{plan,change}.md` | 4+4    | jedyna duża, imienna zmiana w historii            |
+| #   | File                                                         | Changes | Comment                                           |
+| --- | ------------------------------------------------------------ | ------- | ------------------------------------------------- |
+| 1   | `CLAUDE.md`                                                  | 8       | instruction root — grows with every project phase |
+| 2   | `package.json`                                               | 7       | frontend dependencies                             |
+| 3   | `.github/workflows/claude-review.yml`                        | 6       | CI/AI review, being tuned                         |
+| 4   | `src/components/animated-icon.tsx`                           | 5       | **removed** — dead Expo scaffold (see below)      |
+| 5   | `backend/src/index.ts`                                       | 5       | Worker entry point                                |
+| 6   | `backend/package.json`                                       | 5       | backend dependencies                              |
+| 7   | `app.json`                                                   | 5       | Expo config                                       |
+| 8   | `src/lib/auth.tsx`                                           | 4       | auth provider (frontend)                          |
+| 9   | `src/components/ui/collapsible.tsx`                          | 4       | **removed** — scaffold                            |
+| 10  | `src/app/_layout.tsx`                                        | 4       | root layout / auth gate                           |
+| 11  | `context/changes/complete-auth-oauth-reset/{plan,change}.md` | 4+4     | the only large, named change in the history       |
 
-**Znalezisko: struktura kłamie (częściowo).** Cztery z top-15 najczęściej zmienianych plików (`animated-icon.tsx`, `ui/collapsible.tsx`, `app-tabs.tsx`, `app-tabs.web.tsx`) **już nie istnieją** — to martwy scaffold z `create-expo-app`, który był edytowany kilka razy, a potem w całości usunięty. Podobnie `src/app/index.tsx` (stary, płaski routing) zniknął — trasy przeniosły się pod grupę `(app)/`. Historia „top zmienianych" bez weryfikacji obecności w repo myliłaby; wszystkie liczby powyżej są już przefiltrowane pod kątem tego, co realnie istnieje dziś (poza jawnie oznaczonymi „usunięty").
+**Finding: the structure (partially) lies.** Four of the top-15 most-changed files (`animated-icon.tsx`, `ui/collapsible.tsx`, `app-tabs.tsx`, `app-tabs.web.tsx`) **no longer exist** — dead `create-expo-app` scaffold that was edited a few times and then removed entirely. Likewise `src/app/index.tsx` (the old, flat routing) is gone — routes moved under the `(app)/` group. A "most-changed" history without checking presence in the repo would mislead; every number above is already filtered for what actually exists today (except where explicitly marked "removed").
 
-## Katalogi z największą aktywnością (kod appki, bez `Prework/`, `.claude/`, `context/`)
+## Directories with the most activity (app code, excluding `Prework/`, `.claude/`, `context/`)
 
-| Katalog                          | Zmiany | Rola                                                                                              |
-| -------------------------------- | ------ | ------------------------------------------------------------------------------------------------- |
-| `src/components`                 | 26     | UI — w dużej mierze martwy scaffold + żywe komponenty (`record-button`, `task-card`, `segmented`) |
-| `src/app`                        | 18     | ekrany (Expo Router)                                                                              |
-| `src/lib`                        | 13     | logika domenowa klienta: auth, api, recovery                                                      |
-| `backend/test`                   | 13     | testy Workera                                                                                     |
-| `backend` (root) / `backend/src` | 11 / 9 | Worker: routing, AI, Supabase                                                                     |
+| Directory                        | Changes | Role                                                                                    |
+| -------------------------------- | ------- | --------------------------------------------------------------------------------------- |
+| `src/components`                 | 26      | UI — mostly dead scaffold + live components (`record-button`, `task-card`, `segmented`) |
+| `src/app`                        | 18      | screens (Expo Router)                                                                   |
+| `src/lib`                        | 13      | client domain logic: auth, api, recovery                                                |
+| `backend/test`                   | 13      | Worker tests                                                                            |
+| `backend` (root) / `backend/src` | 11 / 9  | Worker: routing, AI, Supabase                                                           |
 
-## Współzmiany (pary plików w tych samych commitach)
+## Co-changes (file pairs in the same commits)
 
-| Para                                                                                            | Wystąpienia | Odczyt                                                                                                                                   |
-| ----------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/src/index.ts` ↔ `context/deployment/deploy-plan.md`                                    | 4           | deploy Workera i jego plan idą razem — spójne                                                                                            |
-| `backend/package.json` ↔ `backend/src/index.ts`                                                 | 4           | zależności i entry point backendu — spodziewane                                                                                          |
-| `app.json` ↔ `package.json`                                                                     | 4           | konfiguracja Expo i zależności — spodziewane                                                                                             |
-| `src/lib/auth.tsx` ↔ `src/lib/supabase.ts`                                                      | 3           | auth i klient Supabase — spójna para, brak zaskoczenia                                                                                   |
-| `context/changes/complete-auth-oauth-reset/change.md` ↔ `src/lib/auth.tsx`                      | 3           | change-id i implementacja auth idą razem — proces działa jak powinien                                                                    |
-| `src/app/sign-in.tsx` ↔ `src/lib/{auth.tsx,recovery.ts,supabase.ts}` + testy `recovery.test.ts` | 2 każda     | ekran logowania konsekwentnie zmienia się z warstwą auth — spójny klaster                                                                |
-| `src/components/record-button.tsx` ↔ `src/lib/api.ts`                                           | 2           | **jedyna** współzmiana dotykająca ścieżki nagrywanie→transkrypcja; niska liczba, bo ta ścieżka w ogóle rzadko była ruszana po zbudowaniu |
+| Pair                                                                                      | Occurrences | Reading                                                                                                                                    |
+| ----------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `backend/src/index.ts` ↔ `context/deployment/deploy-plan.md`                              | 4           | Worker deploy and its plan move together — consistent                                                                                      |
+| `backend/package.json` ↔ `backend/src/index.ts`                                           | 4           | backend dependencies and entry point — expected                                                                                            |
+| `app.json` ↔ `package.json`                                                               | 4           | Expo config and dependencies — expected                                                                                                    |
+| `src/lib/auth.tsx` ↔ `src/lib/supabase.ts`                                                | 3           | auth and the Supabase client — a consistent pair, no surprise                                                                              |
+| `context/changes/complete-auth-oauth-reset/change.md` ↔ `src/lib/auth.tsx`                | 3           | the change-id and the auth implementation move together — the process is working as intended                                               |
+| `src/app/sign-in.tsx` ↔ `src/lib/{auth.tsx,recovery.ts,supabase.ts}` + `recovery.test.ts` | 2 each      | the sign-in screen consistently changes together with the auth layer — a coherent cluster                                                  |
+| `src/components/record-button.tsx` ↔ `src/lib/api.ts`                                     | 2           | the **only** co-change touching the record→transcribe path; low count because this path was rarely touched at all after it was first built |
 
-Brak niepokojących współzmian „na odległość" (np. backend i frontend zmieniające ten sam koncept bez wspólnego pliku) — ale patrz `artifact-2-structure.md` i `03-anti-corruption-layer.md` w `context/domain/`: `TaskStatus`/`TASK_STATUSES` jest zduplikowany **znak w znak** w `src/types.ts` i `backend/src/types.ts` bez importu między nimi, więc git nie złapie rozjazdu, gdyby ktoś zmienił jedną kopię i zapomniał drugiej — to jest dokładnie ten rodzaj sprzężenia, którego współzmiany _nie widzą_, bo nic ich fizycznie nie łączy.
+No worrying "at-a-distance" co-changes (e.g. backend and frontend changing the same concept without a shared file) — but see `artifact-2-structure.md` and `03-anti-corruption-layer.md` in `context/domain/`: `TaskStatus`/`TASK_STATUSES` is duplicated **byte for byte** in `src/types.ts` and `backend/src/types.ts` with no import between them, so git will never catch a drift if someone changes one copy and forgets the other — this is exactly the kind of coupling co-changes _can't see_, because nothing physically links them.
 
-## Plik-hub (dotyka się z najwięcej innych plików)
+## Hub file (touched alongside the most other files)
 
-`package.json`, `CLAUDE.md`, `app.json` dominują — to nie jest ryzyko strukturalne, to normalna konfiguracja repo. Bardziej sygnalny hub: `src/lib/auth.tsx` (46 różnych partnerów współzmian) i `backend/src/index.ts` (32) — obie strony granicy auth/routing są punktami, przez które przewinęła się większość pracy projektu.
+`package.json`, `CLAUDE.md`, `app.json` dominate — that's not structural risk, it's normal repo config. The more signal-bearing hubs: `src/lib/auth.tsx` (46 distinct co-change partners) and `backend/src/index.ts` (32) — both sides of the auth/routing boundary are the points most of the project's work has passed through.
 
-## Motywy commitów (namiastka mapy kontrybutorów — patrz artifact-3)
+## Commit themes (a stand-in for the contributor map — see artifact-3)
 
-| Typ                                     | Liczba     | Co to mówi                                         |
-| --------------------------------------- | ---------- | -------------------------------------------------- |
-| `fix(ci)`                               | 5          | najwięcej pojedynczych poprawek poszło w CI        |
-| `feat(complete-auth-oauth-reset)`       | 3          | jedyna duża feature z własnym change-id w historii |
-| `feat(testing-backend-test-foundation)` | 2          | budowa fundamentu testowego backendu               |
-| `chore`, `docs*`                        | ~8 łącznie | porządki i dokumentacja                            |
+| Type                                    | Count       | What it says                                                 |
+| --------------------------------------- | ----------- | ------------------------------------------------------------ |
+| `fix(ci)`                               | 5           | the largest single category of individual fixes went into CI |
+| `feat(complete-auth-oauth-reset)`       | 3           | the only large feature with its own change-id in the history |
+| `feat(testing-backend-test-foundation)` | 2           | building the backend's test foundation                       |
+| `chore`, `docs*`                        | ~8 combined | cleanup and documentation                                    |
 
-**Wniosek terytorialny:** projekt ma jedno wyraźne centrum praktycznej pracy — **auth** (sign-in, OAuth Google, reset hasła) — udokumentowane własnym change-id i widoczne jako hub współzmian. Poza tym jest jedna duża, cicha strefa: **pipeline głos→zadanie** (`record-button.tsx` → `backend/src/routes/transcribe.ts` → `ai/transcribe.ts` → `ai/extract.ts` → `routes/tasks.ts`), czyli faktyczna propozycja wartości appki, która od czasu zbudowania niemal nie była dotykana (2 współzmiany łącznie) — cicha nie znaczy bezpieczna, patrz `artifact-3-structure.md`/`repo-map.md` (Strefy ryzyka) dla testów, których tam brakuje.
+**Territorial conclusion:** the project has one clear center of practical work — **auth** (sign-in, Google OAuth, password reset) — documented with its own change-id and visible as a co-change hub. Beyond that there is one large, quiet zone: the **voice-to-task pipeline** (`record-button.tsx` → `backend/src/routes/transcribe.ts` → `ai/transcribe.ts` → `ai/extract.ts` → `routes/tasks.ts`), i.e. the app's actual value proposition, which has been barely touched since it was built (2 co-changes total) — quiet doesn't mean safe, see `artifact-3-structure.md`/`repo-map.md` (Risk zones) for the tests missing there.

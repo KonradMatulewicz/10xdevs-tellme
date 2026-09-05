@@ -4,35 +4,35 @@ created: 2026-09-04
 type: refactor-plan
 ---
 
-# Anti-Corruption Layer — port auth (`lib/auth.tsx`) omijany bezpośrednio
+# Anti-Corruption Layer — the auth port (`lib/auth.tsx`) bypassed directly
 
-**Produkt tego dokumentu to PLAN, nie implementacja.** Żaden kod nie został zmieniony.
+**This document's product is a PLAN, not an implementation.** No code has been changed.
 
-## Krok 1 — Identyfikacja przeciekających zależności
+## Step 1 — Identifying leaking dependencies
 
-Repo ma jeden port domenowy dla auth: `src/lib/auth.tsx` (`AuthProvider`/`useAuth()`), który opakowuje `@supabase/supabase-js`'s `supabase.auth.*`. Sprawdzono wszystkie miejsca, które „znają" ten pakiet lub jego wrappowany singleton:
+The repo has one domain port for auth: `src/lib/auth.tsx` (`AuthProvider`/`useAuth()`), which wraps `@supabase/supabase-js`'s `supabase.auth.*`. Checked every place that "knows" this package or its wrapped singleton:
 
-- `grep -rn "supabase\.auth\." src/` → 9 wywołań w `src/lib/auth.tsx` (`onAuthStateChange`, `signInWithPassword`, `signUp`, `signOut`, `signInWithOAuth`, `exchangeCodeForSession`, `resetPasswordForEmail`, `updateUser`) + 1 w `src/lib/api.ts:10` (`getSession`, do pobrania tokena na nagłówek `Authorization`).
-- `grep -rn "from '@/lib/supabase'" src/` → trzy pliki: `src/lib/api.ts`, `src/lib/auth.tsx` (oczekiwane — to sam port i jego sąsiad infrastrukturalny), **i `src/app/reset-password.tsx`** — plik UI, ekran.
+- `grep -rn "supabase\.auth\." src/` → 9 calls in `src/lib/auth.tsx` (`onAuthStateChange`, `signInWithPassword`, `signUp`, `signOut`, `signInWithOAuth`, `exchangeCodeForSession`, `resetPasswordForEmail`, `updateUser`) + 1 in `src/lib/api.ts:10` (`getSession`, to fetch the token for the `Authorization` header).
+- `grep -rn "from '@/lib/supabase'" src/` → three files: `src/lib/api.ts`, `src/lib/auth.tsx` (expected — the port itself and its infrastructure neighbor), **and `src/app/reset-password.tsx`** — a UI file, a screen.
 
-**Najgorszy przeciek**: `src/app/reset-password.tsx:25,62-63` importuje `supabase` bezpośrednio i woła `supabase.auth.exchangeCodeForSession(code)` **z pominięciem `lib/auth.tsx` całkowicie**, mimo że `lib/auth.tsx:100` **już wywołuje dokładnie tę samą metodę** (`supabase.auth.exchangeCodeForSession(code)`) wewnątrz `signInWithGoogle`. Ta sama operacja SDK ma dziś dwie niezależne implementacje w repo.
+**The worst leak**: `src/app/reset-password.tsx:25,62-63` imports `supabase` directly and calls `supabase.auth.exchangeCodeForSession(code)` **bypassing `lib/auth.tsx` entirely**, even though `lib/auth.tsx:100` **already calls the exact same method** (`supabase.auth.exchangeCodeForSession(code)`) inside `signInWithGoogle`. The same SDK operation has two independent implementations in the repo today.
 
-Drugi, słabszy przeciek: `AuthState.session: Session | null` w `src/lib/auth.tsx:13` eksponuje typ wprost z `@supabase/supabase-js` jako część publicznego kontraktu portu, zamiast własnego typu domenowego.
+A second, weaker leak: `AuthState.session: Session | null` in `src/lib/auth.tsx:13` exposes a type straight from `@supabase/supabase-js` as part of the port's public contract, instead of a domain type of its own.
 
-## Krok 2 — Klasyfikacja i wybór najgorszego przecieku
+## Step 2 — Classification and selecting the worst leak
 
-| Przeciek                                                                                 | (a) Liczba dotkniętych plików                                                                                                                                             | (b) Koszt wymiany dziś                                                                                                                                             | (c) Czy dokument deklaruje wymienialność?                                                                                                                                                                |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `exchangeCodeForSession` wołany bezpośrednio w `reset-password.tsx`, z pominięciem portu | 2 (`auth.tsx`, `reset-password.tsx`)                                                                                                                                      | Wymiana Supabase Auth na inny provider wymagałaby znalezienia i poprawienia **dwóch** niezależnych implementacji tej samej operacji, z ryzykiem przeoczenia jednej | Nie explicite, ale `auth.tsx` istnieje właśnie po to, żeby być jedynym miejscem, które „zna" Supabase Auth — cel pliku jest ewidentny z jego własnej struktury (`AuthState` interfejs, `useAuth()` hook) |
-| `Session` typu wendora w `AuthState.session`                                             | 1 plik definiuje, 2 pliki konsumują (`(app)/_layout.tsx`, `sign-in.tsx`) — ale **żaden konsument nie sięga po pola specyficzne dla Supabase**, tylko sprawdza `!!session` | Niski — potwierdzone grepem, że jedyne użycia poza `auth.tsx` to `truthy`-check                                                                                    | Nie                                                                                                                                                                                                      |
+| Leak                                                                                 | (a) Number of files touched                                                                                                                                     | (b) Cost of swapping today                                                                                                                                  | (c) Does a document declare replaceability?                                                                                                                                                            |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `exchangeCodeForSession` called directly in `reset-password.tsx`, bypassing the port | 2 (`auth.tsx`, `reset-password.tsx`)                                                                                                                            | Swapping Supabase Auth for another provider would require finding and fixing **two** independent implementations of the same operation, risking missing one | Not explicit, but `auth.tsx` exists precisely to be the only place that "knows" Supabase Auth — the file's purpose is evident from its own structure (the `AuthState` interface, the `useAuth()` hook) |
+| The vendor `Session` type in `AuthState.session`                                     | 1 file defines it, 2 files consume it (`(app)/_layout.tsx`, `sign-in.tsx`) — but **no consumer reaches for a Supabase-specific field**, only checks `!!session` | Low — confirmed by grep that the only uses outside `auth.tsx` are truthiness checks                                                                         | No                                                                                                                                                                                                     |
 
-**Wybór: `exchangeCodeForSession` w `reset-password.tsx`.** To nie jest hipotetyczne ryzyko wymiany dostawcy w przyszłości (jak w klasycznym przykładzie ACL) — to **już dziś istniejąca duplikacja z realnym, obecnym kosztem**: dwie implementacje tej samej operacji mają dwie różne strategie obsługi błędów (patrz Krok 3). `Session`-w-typie jest realny, ale niskiego ryzyka przy obecnym, wąskim sposobie konsumpcji — odnotowany, nie eskalowany do #1.
+**Choice: `exchangeCodeForSession` in `reset-password.tsx`.** This isn't a hypothetical future-vendor-swap risk (as in the classic ACL example) — it's **an already-existing duplication with a real, present cost**: two implementations of the same operation have two different error-handling strategies (see Step 3). The `Session`-as-a-type leak is real but low-risk given how narrowly it's consumed today — noted, not escalated to #1.
 
-## Krok 3 — Diagnoza
+## Step 3 — Diagnosis
 
-**`src/lib/auth.tsx:77-107` (`signInWithGoogle`)** — wywołanie `exchangeCodeForSession` na linii 100, błąd mapowany przez `mapAuthError()` (`auth.tsx:27-40` — dedykowana funkcja, przetestowana w `src/lib/__tests__/map-auth-error.test.ts`, 4 przypadki), w tym specjalna obsługa „email already exists" z przyjazną wiadomością.
+**`src/lib/auth.tsx:77-107` (`signInWithGoogle`)** — calls `exchangeCodeForSession` at line 100, the error is mapped through `mapAuthError()` (`auth.tsx:27-40` — a dedicated function, tested in `src/lib/__tests__/map-auth-error.test.ts`, 4 cases), including a special "email already exists" case with a friendly message.
 
-**`src/app/reset-password.tsx:55-81`** — ten sam wywołanie SDK, ale:
+**`src/app/reset-password.tsx:55-81`** — the same SDK call, but:
 
 ```
 supabase.auth
@@ -44,37 +44,37 @@ supabase.auth
     }
 ```
 
-Błąd tutaj **nie przechodzi przez `mapAuthError`** — to osobny, ręcznie napisany komunikat, niespójny stylistycznie i informacyjnie z tym, co `signInWithGoogle` zwróciłby dla analogicznego błędu wymiany kodu. Gdyby `mapAuthError` zyskał w przyszłości nową specjalizację dla błędów wymiany kodu (np. rozróżnienie „kod wygasł" vs „kod już użyty"), `reset-password.tsx` by jej nie dostał — trzeba by pamiętać o dwóch miejscach.
+The error here **does not go through `mapAuthError`** — it's a separate, hand-written message, stylistically and informationally inconsistent with what `signInWithGoogle` would return for an analogous code-exchange error. If `mapAuthError` were to gain a new specialization for code-exchange errors in the future (e.g. distinguishing "code expired" from "code already used"), `reset-password.tsx` wouldn't get it — someone would have to remember there are two places.
 
-To nie jest hipotetyczne: `reset-password.tsx` i `signInWithGoogle` **oba** implementują wymianę kodu OAuth-stylu (PKCE `flowType`, `src/lib/supabase.ts:26`) dla dwóch różnych przepływów (Google sign-in, reset hasła) — ten sam mechanizm SDK, dwa niezależne wdrożenia w kodzie.
+This isn't hypothetical: `reset-password.tsx` and `signInWithGoogle` **both** implement OAuth-style code exchange (PKCE `flowType`, `src/lib/supabase.ts:26`) for two different flows (Google sign-in, password reset) — the same SDK mechanism, two independent implementations in the code.
 
-## Krok 4 — Projekt ACL
+## Step 4 — ACL design
 
-**Domenowa funkcja** (rozszerzenie istniejącego portu `auth.tsx`, nie nowy plik): dodać `exchangeAuthCode(code: string): Promise<Result>` do `AuthState`, opakowującą `supabase.auth.exchangeCodeForSession` + `mapAuthError`, analogicznie do istniejących `resetPassword`/`updatePassword`.
+**A domain function** (an extension of the existing `auth.tsx` port, not a new file): add `exchangeAuthCode(code: string): Promise<Result>` to `AuthState`, wrapping `supabase.auth.exchangeCodeForSession` + `mapAuthError`, analogous to the existing `resetPassword`/`updatePassword`.
 
-- **Sygnatura**: `exchangeAuthCode: (code: string) => Promise<Result>` (ten sam kształt `Result` co `signIn`/`resetPassword` — `{ error?: string }`, już zdefiniowany w `auth.tsx:9`).
-- **`signInWithGoogle`** (`auth.tsx:77-107`) i **`reset-password.tsx`** oba wołają `exchangeAuthCode(code)` z `useAuth()` zamiast każdy osobno wołać `supabase.auth.exchangeCodeForSession`.
-- **Reszta kodu zna tylko `useAuth()`** — `reset-password.tsx` przestaje importować `@/lib/supabase` w ogóle (jego jedyny import stamtąd dziś to właśnie to jedno wywołanie).
+- **Signature**: `exchangeAuthCode: (code: string) => Promise<Result>` (the same `Result` shape as `signIn`/`resetPassword` — `{ error?: string }`, already defined in `auth.tsx:9`).
+- **`signInWithGoogle`** (`auth.tsx:77-107`) and **`reset-password.tsx`** both call `exchangeAuthCode(code)` from `useAuth()` instead of each independently calling `supabase.auth.exchangeCodeForSession`.
+- **The rest of the code only knows `useAuth()`** — `reset-password.tsx` stops importing `@/lib/supabase` at all (its only import from there today is this one call).
 
-## Krok 5 — Dowód izolacji + before/after
+## Step 5 — Proof of isolation + before/after
 
-**Before:** `grep -rn "supabase\.auth\.exchangeCodeForSession" src/` → 2 pliki (`auth.tsx`, `reset-password.tsx`).
-**After (kryterium sukcesu, sprawdzalne w sekundę):** ten sam grep → dokładnie 1 plik (`auth.tsx`). `grep -rn "from '@/lib/supabase'" src/` → 2 pliki (`api.ts`, `auth.tsx`), nie 3.
+**Before:** `grep -rn "supabase\.auth\.exchangeCodeForSession" src/` → 2 files (`auth.tsx`, `reset-password.tsx`).
+**After (success criterion, checkable in a second):** the same grep → exactly 1 file (`auth.tsx`). `grep -rn "from '@/lib/supabase'" src/` → 2 files (`api.ts`, `auth.tsx`), not 3.
 
-**Before/after błędu:** dziś użytkownik resetujący hasło z wygasłym linkiem dostaje inny styl komunikatu niż użytkownik, u którego nie powiodła się wymiana kodu Google OAuth — mimo że to technicznie ten sam rodzaj awarii SDK. Po zmianie oba przechodzą przez `mapAuthError`, więc przyszłe usprawnienie komunikatu trafia do obu przepływów naraz, jednym miejscem zmiany.
+**Before/after of the bug:** today a user resetting their password with an expired link gets a different style of message than a user whose Google OAuth code exchange failed — even though these are technically the same kind of SDK failure. After the change, both go through `mapAuthError`, so any future improvement to the message reaches both flows at once, from a single point of change.
 
-## Krok 6 — Weryfikacja i plan
+## Step 6 — Verification and plan
 
-**Kryterium sukcesu:** `grep -rn "supabase\.auth\.exchangeCodeForSession" src/` zwraca wyłącznie `src/lib/auth.tsx`.
+**Success criterion:** `grep -rn "supabase\.auth\.exchangeCodeForSession" src/` returns only `src/lib/auth.tsx`.
 
-**Plan faz (do realizacji jako osobna zmiana):**
+**Phase plan (to be carried out as a separate change):**
 
-1. Dodać `exchangeAuthCode` do `AuthState` + `AuthProvider`, wewnętrznie identyczna logika co dzisiejszy fragment `signInWithGoogle:98-101`, żeby `signInWithGoogle` mogła się na niej oprzeć bez zmiany zachowania.
-2. Przepiąć `signInWithGoogle` na `exchangeAuthCode` (powinno być zachowaniowo no-op — ten sam kod, przeniesiony).
-3. Przepiąć `reset-password.tsx` na `exchangeAuthCode` z `useAuth()`, usunąć import `@/lib/supabase`. **To jest jedyny krok z realną zmianą zachowania** — komunikat błędu zmienia się z ręcznego tekstu na wynik `mapAuthError` (do zdecydowania w planie: czy zachować dzisiejszy tekst jako fallback w `mapAuthError`, czy zaakceptować nowy, spójniejszy komunikat).
-4. `src/lib/__tests__/map-auth-error.test.ts` już istnieje i już testuje `mapAuthError` — nowy test dla `exchangeAuthCode` powinien objąć głównie „error przechodzi przez", nie retestować `mapAuthError` samo w sobie.
+1. Add `exchangeAuthCode` to `AuthState` + `AuthProvider`, internally identical logic to today's `signInWithGoogle:98-101` fragment, so `signInWithGoogle` can lean on it without a behavior change.
+2. Rewire `signInWithGoogle` to use `exchangeAuthCode` (should be a behavioral no-op — the same code, moved).
+3. Rewire `reset-password.tsx` to use `exchangeAuthCode` from `useAuth()`, remove the `@/lib/supabase` import. **This is the only step with a real behavior change** — the error message changes from hand-written text to `mapAuthError`'s output (to be decided in the plan: keep today's text as a fallback inside `mapAuthError`, or accept a new, more consistent message).
+4. `src/lib/__tests__/map-auth-error.test.ts` already exists and already tests `mapAuthError` — a new test for `exchangeAuthCode` should mainly cover "the error passes through," not re-test `mapAuthError` itself.
 
-## Ograniczenia
+## Limitations
 
-- Przeciek `Session`-jako-typu-wendora nie jest tu naprawiany — niski koszt dziś (potwierdzone grepem konsumpcji), zostawiony jako odnotowana, świadoma obserwacja w `01-domain-distillation.md`, nie osobny plan.
-- Nie zweryfikowano ast-grepem w tym dokumencie (plan, nie zamknięty research) — kryterium sukcesu z Kroku 6 jest jednak trywialnie sprawdzalne samodzielnie po implementacji, tym samym grepem użytym do diagnozy.
+- The `Session`-as-vendor-type leak is not fixed here — low cost today (confirmed by a grep of its consumption), left as a noted, deliberate observation in `01-domain-distillation.md`, not a separate plan.
+- Not verified with ast-grep in this document (a plan, not a closed research pass) — the success criterion from Step 6 is, however, trivially checkable on its own after implementation, with the same grep used for the diagnosis.

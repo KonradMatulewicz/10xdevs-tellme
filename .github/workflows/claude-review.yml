@@ -21,10 +21,10 @@ jobs:
       - uses: anthropics/claude-code-action@fa2b2666b747000bf42767d1f332065b375e3c8f # v1.0.214
         with:
           prompt: |
-            Zrób review tego PR-a pod kątem poprawności, bezpieczeństwa i czytelności,
-            uwzględniając konwencje z CLAUDE.md tego repozytorium (Expo Router, path alias
-            @/*, React Compiler, platform variants). Dla każdego zmienionego pliku podaj
-            konkretne sugestie.
+            Review this PR for correctness, security, and readability,
+            taking into account the conventions in this repository's CLAUDE.md (Expo Router,
+            path alias @/*, React Compiler, platform variants). For each changed file, give
+            concrete suggestions.
           # --allowedTools pre-authorizes Read/Grep/Glob (no approval prompt); it does NOT
           # exclude Bash — Bash stays reachable and goes through the normal permission
           # pipeline, which denies anything not pre-approved when there's no human in CI.

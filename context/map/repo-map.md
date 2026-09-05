@@ -1,5 +1,5 @@
 ---
-title: 'Mapa projektu — Tellme'
+title: 'Project map — Tellme'
 type: repo-map
 created: 2026-09-04
 sources:
@@ -8,11 +8,11 @@ sources:
   - context/map/artifact-3-contributors.md
 ---
 
-# Mapa projektu — Tellme
+# Project map — Tellme
 
 ## TL;DR
 
-Tellme to appka RN/Expo (frontend, Expo Router) + Cloudflare Worker na Hono (backend), połączone przez Supabase (auth + Postgres/RLS). Warstwy:
+Tellme is an RN/Expo app (frontend, Expo Router) + a Cloudflare Worker on Hono (backend), connected through Supabase (auth + Postgres/RLS). Layers:
 
 ```mermaid
 flowchart LR
@@ -38,68 +38,68 @@ flowchart LR
   Auth -.->|Session, OAuth| DB
 ```
 
-Skala jest mała (43 commity, ~3 miesiące, jeden autor, ~24 pliki `src/`, ~8 `backend/src/`), więc ta mapa nie udaje analizy Mattermost-scale — kalibrowana jest w dół (zero rozbicia kwartalnego, zero realnej mapy kontrybutorów), ale metoda jest ta sama: dowody z gita, grafu importów i kodu, nie zgadywanie. Praca skupiła się dotychczas na **auth** (pełny cykl `research→plan→implement`, własny change-id) i na **fundamencie testowym backendu**; **pipeline głos→zadanie — czyli faktyczny rdzeń produktu — nigdy nie przeszedł przez ten sam proces** i nie ma testów po żadnej stronie. To jest najważniejszy pojedynczy wniosek tej mapy.
+The scale is small (43 commits, ~3 months, one author, ~24 files in `src/`, ~8 in `backend/src/`), so this map doesn't pretend to be a Mattermost-scale analysis — it's calibrated down (no quarterly breakdown, no real contributor map), but the method is the same: evidence from git, the import graph, and the code, not guesswork. Work so far has concentrated on **auth** (a full `research→plan→implement` cycle, its own change-id) and on the **backend's test foundation**; **the voice-to-task pipeline — the product's actual core — has never gone through that same process** and has no tests on either side. That's the single most important conclusion of this map.
 
-## Teren
+## Territory
 
-**Głębokie / centralne:**
+**Deep / central:**
 
-- `src/lib/auth.tsx` (fan-in 6, 46 partnerów współzmian) — jedyny punkt dostępu do sesji w całej appce, przeszedł pełny cykl zmiany.
-- `app/(app)/index.tsx` (fan-out 10, ~250 linii) — ekran główny robi naraz: nagrywanie, listę, wyszukiwanie, taby, optimistic update. To jest realne centrum lokalne UI, nie cienkie wejście.
-- `backend/src/routes/transcribe.ts` (fan-out 4) — orkiestruje cały pipeline: transkrypcja → ekstrakcja → zapis. Najgrubszy plik backendu.
-- `constants/theme.ts` / `hooks/use-theme.ts` (fan-in 11 / 9) — fundament UI, dotykany przez prawie wszystko, ale stabilny (theming, nie logika biznesowa).
+- `src/lib/auth.tsx` (fan-in 6, 46 co-change partners) — the only access point to the session in the whole app, has been through a full change cycle.
+- `app/(app)/index.tsx` (fan-out 10, ~250 lines) — the home screen does recording, the list, search, tabs, and optimistic updates all at once. A genuine local UI center, not a thin entry point.
+- `backend/src/routes/transcribe.ts` (fan-out 4) — orchestrates the whole pipeline: transcription → extraction → save. The heaviest backend file.
+- `constants/theme.ts` / `hooks/use-theme.ts` (fan-in 11 / 9) — the UI foundation, touched by nearly everything, but stable (theming, not business logic).
 
-**Płytkie / cienkie wejścia (świadomie, nie przez zaniedbanie):**
+**Shallow / thin entry points (deliberately, not through neglect):**
 
-- `app/auth-callback.tsx` — celowo pusty `<Redirect href="/" />`, wymiana kodu OAuth dzieje się w `lib/auth.tsx`. Komentarz w pliku to potwierdza.
-- `backend/src/ai/transcribe.ts`, `ai/extract.ts` — dobrze izolowane porty do Whisper/Claude, wywoływane tylko z jednego miejsca.
+- `app/auth-callback.tsx` — deliberately empty `<Redirect href="/" />`; the OAuth code exchange happens in `lib/auth.tsx`. A comment in the file confirms this.
+- `backend/src/ai/transcribe.ts`, `ai/extract.ts` — well-isolated ports to Whisper/Claude, called from only one place.
 
-**Peryferia / martwe:** scaffold z `create-expo-app` (`animated-icon.tsx`, `ui/collapsible.tsx`, `app-tabs*.tsx`) — był w historii, **już usunięty z repo w całości**. Struktura katalogów dziś jest czystsza niż jej historia sugeruje; nie ma obecnie znanych martwych plików w `src/` lub `backend/src/`.
+**Periphery / dead:** `create-expo-app` scaffold (`animated-icon.tsx`, `ui/collapsible.tsx`, `app-tabs*.tsx`) — was in the history, **already removed from the repo entirely**. The directory structure today is cleaner than its history suggests; there are no currently known dead files in `src/` or `backend/src/`.
 
-**Aktywność w czasie:** za krótka historia (3 miesiące) na sensowny podział kwartalny. Trzy klastry tematyczne widoczne w commitach: bootstrap → fundament testowy backendu → auth (z pełnym change-id) → ciągłe `fix(ci)` (najliczniejsza pojedyncza kategoria, 5 commitów). Pipeline głos→zadanie nie ma swojego klastra — zbudowany, ale nigdy nie wrócił do niego proces.
+**Activity over time:** the history is too short (3 months) for a meaningful quarterly split. Three topical clusters are visible in the commits: bootstrap → backend test foundation → auth (with a full change-id) → ongoing `fix(ci)` (the largest single category, 5 commits). The voice-to-task pipeline has no cluster of its own — built, but the process never came back to it.
 
-## Realne powiązania
+## Real couplings
 
-- **`auth.tsx` ↔ `supabase.ts` ↔ ekrany logowania** — spójny klaster, potwierdzony i grafem importów, i współzmianami. Brak niespodzianek.
-- **`TASK_STATUSES`/`TaskStatus` zduplikowane znak w znak** w `src/types.ts` i `backend/src/types.ts`, zero importu między nimi — _graf tego nie widzi_ (brak krawędzi), _współzmiany tego nie widzą_ (nigdy się razem nie zmieniły). To jest connascence znaczenia na dystansie, wykryte tylko przez ręczne czytanie obu plików. Pełna analiza: `context/domain/01-domain-distillation.md`.
-- **Duplikacja logiki zapisu tasków**: `routes/transcribe.ts` (49–52) i `routes/tasks.ts` (54–57) mają niemal identyczny insert-blok. Kod, nie import — `madge` też tego nie złapie.
-- **SDK-typ jako typ domenowy**: `src/lib/auth.tsx` wystawia `Session` z `@supabase/supabase-js` bezpośrednio jako `AuthState.session`. Kandydat ACL — `context/domain/03-anti-corruption-layer.md`.
-- **Cykle:** brak, w obu grafach (`src/`, `backend/src/`).
-- **Warstwy runtime, których graf nie widzi:** Cloudflare Workers AI binding (`c.env.AI`), zmienne środowiskowe Supabase/Anthropic — brak importu, ale realna zależność w runtime. Oznaczone jako `unknown` dla przyszłej zmiany w konfiguracji Workera.
+- **`auth.tsx` ↔ `supabase.ts` ↔ sign-in screens** — a coherent cluster, confirmed both by the import graph and by co-changes. No surprises.
+- **`TASK_STATUSES`/`TaskStatus` duplicated byte for byte** in `src/types.ts` and `backend/src/types.ts`, zero import between them — _the graph can't see this_ (no edge), _co-changes can't see this_ (they've never changed together). This is connascence of meaning at a distance, found only by reading both files by hand. Full analysis: `context/domain/01-domain-distillation.md`.
+- **Task-save logic duplication**: `routes/transcribe.ts` (49–52) and `routes/tasks.ts` (54–57) have a near-identical insert block. Code, not an import — `madge` won't catch this either.
+- **An SDK type used as a domain type**: `src/lib/auth.tsx` exposes `Session` from `@supabase/supabase-js` directly as `AuthState.session`. An ACL candidate — `context/domain/03-anti-corruption-layer.md`.
+- **Cycles:** none, in either graph (`src/`, `backend/src/`).
+- **Runtime layers the graph can't see:** the Cloudflare Workers AI binding (`c.env.AI`), Supabase/Anthropic environment variables — no import, but a real runtime dependency. Marked `unknown` for any future change to the Worker's configuration.
 
-## Strefy ryzyka
+## Risk zones
 
-1. **Pipeline głos→zadanie bez testów po żadnej stronie.** Zero testów dla `src/lib/api.ts` (transcribe/fetchTasks/updateTask), `record-button.tsx`, `backend/src/routes/transcribe.ts`, `ai/transcribe.ts`, `ai/extract.ts`. To jedyny obszar appki, który realizuje główną propozycję wartości i jednocześnie ma najsłabszą siatkę bezpieczeństwa. **Dlaczego:** to jest cel L3 (Deep Focus) w tej ścieżce.
-2. **Duplikacja insertu tasków między dwoma routerami** (`transcribe.ts` / `tasks.ts`) — nic nie pilnuje zgodności kształtu, jeśli jeden się zmieni bez drugiego.
-3. **`TaskStatus` zduplikowany bez wspólnego źródła** — zmiana wartości statusu w jednym miejscu bez drugiego przejdzie każdy dotychczasowy test i CI.
-4. **`RecordButton`: animacja świadomie wyłączona** (`// Reanimated temporarily removed to isolate an iOS-only freeze`) — udokumentowany, ale nie domknięty dług: przycisk nagrywania, czyli główny CTA appki, działa dziś bez animacji pulsu, bo naprawa zawieszenia na iOS nie została jeszcze zamknięta.
-5. **`middleware/auth.ts` świadomie nie weryfikuje podpisu JWT** (deleguje do PostgREST, żeby zmieścić się w 10ms CPU cap free-tier Workera) — udokumentowana, świadoma decyzja, nie przypadkowy brak; wart guarda/testu potwierdzającego założenie („token bez ważnego JWT dostaje 401 na dalszym etapie"), nie przebudowy.
-6. **`createSupabaseClient` oznaczony w kodzie jako `LOAD-BEARING`**, odsyła do `context/foundation/infrastructure.md` (risk register #1) — konkretny, już nazwany punkt kruchości infrastruktury, nie coś, co ta mapa odkrywa od zera.
+1. **The voice-to-task pipeline has no tests on either side.** Zero tests for `src/lib/api.ts` (transcribe/fetchTasks/updateTask), `record-button.tsx`, `backend/src/routes/transcribe.ts`, `ai/transcribe.ts`, `ai/extract.ts`. The only area of the app that delivers the core value proposition, and simultaneously has the weakest safety net. **Why it matters:** this is the L3 (Deep Focus) target on this track.
+2. **Task-insert duplication between two routers** (`transcribe.ts` / `tasks.ts`) — nothing enforces shape agreement if one changes without the other.
+3. **`TaskStatus` duplicated with no shared source** — changing a status value in one place without the other would pass every existing test and CI.
+4. **`RecordButton`: animation deliberately disabled** (`// Reanimated temporarily removed to isolate an iOS-only freeze`) — documented but unresolved debt: the record button, the app's main CTA, runs today without its pulse animation because the iOS freeze fix was never closed out.
+5. **`middleware/auth.ts` deliberately doesn't verify the JWT signature** (delegates to PostgREST, to stay under the Worker free tier's 10ms CPU cap) — a documented, deliberate decision, not an accidental gap; worth a guard/test confirming the assumption ("a token without a valid JWT gets a 401 further downstream"), not a rebuild.
+6. **`createSupabaseClient` is marked `LOAD-BEARING` in the code**, pointing at `context/foundation/infrastructure.md` (risk register #1) — a concrete, already-named point of infrastructure fragility, not something this map is discovering from scratch.
 
-## Kogo zapytać
+## Who to ask
 
-Repo solo — nie ma kogo zapytać poza analizą dokumentów. Zamiast osób, per strefa:
+Solo repo — there's no one to ask beyond analyzing the documents. Instead of people, per risk zone:
 
-| Strefa ryzyka                       | Gdzie szukać kontekstu                                                            |
-| ----------------------------------- | --------------------------------------------------------------------------------- |
-| Pipeline głos→zadanie               | `context/foundation/prd.md` (FR-004..FR-014), komentarze w `routes/transcribe.ts` |
-| Auth / JWT                          | `context/changes/complete-auth-oauth-reset/` (change.md, plan.md, reviews/)       |
-| Infrastruktura Supabase-na-Workerze | `context/foundation/infrastructure.md` (risk register)                            |
-| Testy backendu                      | `context/changes/testing-backend-test-foundation/`                                |
+| Risk zone                         | Where to find context                                                            |
+| --------------------------------- | -------------------------------------------------------------------------------- |
+| Voice-to-task pipeline            | `context/foundation/prd.md` (FR-004..FR-014), comments in `routes/transcribe.ts` |
+| Auth / JWT                        | `context/changes/complete-auth-oauth-reset/` (change.md, plan.md, reviews/)      |
+| Supabase-on-Worker infrastructure | `context/foundation/infrastructure.md` (risk register)                           |
+| Backend tests                     | `context/changes/testing-backend-test-foundation/`                               |
 
-## Pierwszy dzień
+## Day one
 
-1. `context/foundation/prd.md` — co appka ma robić (FR-004..FR-014 to pipeline głos→zadanie).
-2. `backend/src/routes/transcribe.ts` — orkiestrator rdzenia produktu, czyta się w 2 minuty i mówi więcej niż drzewo katalogów.
-3. `src/app/(app)/index.tsx` — ekran główny, centrum UI.
-4. `src/lib/auth.tsx` — jedyny punkt prawdy o sesji.
-5. `backend/src/types.ts` + `src/types.ts` — przeczytać oba naraz, żeby zobaczyć duplikat `TaskStatus` na własne oczy.
-6. `context/changes/complete-auth-oauth-reset/change.md` — jedyny w pełni udokumentowany cykl zmiany w projekcie, wzorzec do naśladowania.
+1. `context/foundation/prd.md` — what the app is supposed to do (FR-004..FR-014 is the voice-to-task pipeline).
+2. `backend/src/routes/transcribe.ts` — the product core's orchestrator, a 2-minute read that says more than the directory tree.
+3. `src/app/(app)/index.tsx` — the home screen, the UI center.
+4. `src/lib/auth.tsx` — the single source of truth for the session.
+5. `backend/src/types.ts` + `src/types.ts` — read both at once to see the `TaskStatus` duplicate with your own eyes.
+6. `context/changes/complete-auth-oauth-reset/change.md` — the only fully documented change cycle in the project, a pattern worth following.
 
-## Ograniczenia
+## Limitations
 
-- **Okno czasowe:** cała historia gita (43 commitów, ~3 miesiące) — brak sensu w rozbiciu kwartalnym, więc go pominięto zamiast udawać trend.
-- **Kontrybutorzy:** jeden autor pod dwiema tożsamościami gita — sekcja „kontrybutorzy" w tym repo jest z konieczności namiastką (pełne uzasadnienie: `artifact-3-contributors.md`).
-- **Graf zależności** (`madge`) pokazuje importy statyczne w danym momencie, nie runtime coupling (Cloudflare bindings, zmienne środowiskowe) ani intencję. Zero cykli w obu grafach, ale to nie znaczy zero sprzężenia — patrz sekcja „Realne powiązania" dla sprzężeń, których graf nie widzi.
-- **`dependency-cruiser` pominięty** na rzecz `npx madge` — nie dodano żadnej nowej zależności do `package.json`/`backend/package.json`.
-- Ta mapa nie ocenia jakości kodu ani nie proponuje refaktoru — to robota L3/L4 (`context/changes/voice-task-pipeline/`, `context/changes/refactor-opportunities/`).
+- **Time window:** the whole git history (43 commits, ~3 months) — no point in a quarterly breakdown, so it was skipped rather than faking a trend.
+- **Contributors:** one author under two git identities — the "contributors" section in this repo is necessarily a stand-in (full justification: `artifact-3-contributors.md`).
+- **The dependency graph** (`madge`) shows static imports at a point in time, not runtime coupling (Cloudflare bindings, environment variables) or intent. Zero cycles in both graphs, but that doesn't mean zero coupling — see the "Real couplings" section for coupling the graph can't see.
+- **`dependency-cruiser` was skipped** in favor of `npx madge` — no new dependency was added to `package.json`/`backend/package.json`.
+- This map doesn't assess code quality or propose a refactor — that's L3/L4's job (`context/changes/voice-task-pipeline/`, `context/changes/refactor-opportunities/`).

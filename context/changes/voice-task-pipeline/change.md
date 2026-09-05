@@ -9,4 +9,4 @@ archived_at: null
 
 ## Notes
 
-Deep Focus: analiza przepływu danych głos→zadanie (record-button.tsx → backend/src/routes/transcribe.ts → ai/transcribe.ts → ai/extract.ts → routes/tasks.ts). To rdzeń produktu Tellme, wskazany w context/map/repo-map.md jako strefa ryzyka #1 — jedyny obszar appki bez żadnych testów po obu stronach, który nigdy nie przeszedł przez pełny cykl research→plan (w przeciwieństwie do auth). Ta zmiana jest tylko researchem: żadnego refaktoru, żadnej decyzji na tym etapie — produktem jest research.md z sekcjami Feature overview i Technical debt.
+Deep Focus: trace the data flow of the voice-to-task pipeline (record-button.tsx → backend/src/routes/transcribe.ts → ai/transcribe.ts → ai/extract.ts → routes/tasks.ts). This is Tellme's product core, flagged in context/map/repo-map.md as risk zone #1 — the only area of the app with zero tests on either side, which has never gone through a full research→plan cycle (unlike auth). This change is research-only: no refactor, no decision at this stage — the deliverable is research.md with Feature overview and Technical debt sections.

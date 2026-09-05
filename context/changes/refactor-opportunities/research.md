@@ -21,118 +21,118 @@ last_updated_by: Claude (10x-research)
 
 ## Research Question
 
-Które problemy z `context/changes/voice-task-pipeline/research.md` (sekcja Technical debt) warto naprawić, w jakim docelowym kształcie i w jakiej kolejności — eksploracja, nie decyzja.
+Which problems from `context/changes/voice-task-pipeline/research.md` (Technical debt section) are worth fixing, in what target shape, and in what order — exploration, not a decision.
 
-## Klasyfikacja kandydatów (na starcie, do audytu)
+## Candidate classification (upfront, for audit)
 
-| #   | Problem z `voice-task-pipeline/research.md`                                         | Kandydat? | Uzasadnienie                                                                                                                                                                                  |
-| --- | ----------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C1  | Zduplikowany insert do `tasks` (`routes/transcribe.ts` / `routes/tasks.ts`)         | **TAK**   | Naprawa zmienia strukturę kodu (nowa funkcja/moduł współdzielony)                                                                                                                             |
-| C2  | Zduplikowany `TaskStatus`/`TASK_STATUSES` (`src/types.ts` / `backend/src/types.ts`) | **TAK**   | Naprawa wymaga nowego mechanizmu synchronizacji/kontraktu                                                                                                                                     |
-| C3  | Brak transakcyjności przy częściowej awarii (insert po udanym Whisper+Claude)       | **TAK**   | Naprawa zmienia przepływ sterowania w handlerze                                                                                                                                               |
-| C4  | Brak generyka `Database` na kliencie Supabase                                       | **TAK**   | Naprawa zmienia sygnaturę i typy w całym module dostępu do danych                                                                                                                             |
-| —   | Zero testów na 5/6 plików pipeline'u                                                | **NIE**   | To luka w pokryciu, nie problem strukturalny — już nazwana i zaplanowana jako `test-plan.md` Faza 2. Wejście do oceny wykonalności (patrz C1: bezpieczeństwo refaktoru), nie osobny kandydat. |
-| —   | Usunięta animacja Reanimated w `record-button.tsx` (iOS freeze)                     | **NIE**   | To bugfix/dokończenie znanego workaroundu, nie problem strukturalny — poza zakresem tej lekcji (M4L4 nie obejmuje debugowania, to M5).                                                        |
+| #   | Problem from `voice-task-pipeline/research.md`                                    | Candidate? | Rationale                                                                                                                                                                              |
+| --- | --------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | Duplicated insert into `tasks` (`routes/transcribe.ts` / `routes/tasks.ts`)       | **YES**    | The fix changes the code's structure (a new shared function/module)                                                                                                                    |
+| C2  | Duplicated `TaskStatus`/`TASK_STATUSES` (`src/types.ts` / `backend/src/types.ts`) | **YES**    | The fix requires a new sync/contract mechanism                                                                                                                                         |
+| C3  | No transactionality on partial failure (insert after a successful Whisper+Claude) | **YES**    | The fix changes the control flow in the handler                                                                                                                                        |
+| C4  | No `Database` generic on the Supabase client                                      | **YES**    | The fix changes the signature and types across the whole data-access module                                                                                                            |
+| —   | Zero tests on 5/6 pipeline files                                                  | **NO**     | A coverage gap, not a structural problem — already named and planned as `test-plan.md` Phase 2. Input to feasibility assessment (see C1: refactor safety), not a candidate of its own. |
+| —   | Removed Reanimated animation in `record-button.tsx` (iOS freeze)                  | **NO**     | A bugfix/finishing a known workaround, not a structural problem — out of scope for this lesson (M4L4 doesn't cover debugging, that's M5).                                              |
 
-Dodatkowe odkrycie spoza pierwotnej listy, ale krytyczne dla oceny wykonalności każdego kandydata: **żaden job CI nie typechecku­je `backend/src`.** Root `tsconfig.json:12` jawnie wyklucza `backend`; `backend-tests` w CI woła tylko `vitest run`, nigdy własny skrypt `npm run typecheck` z `backend/package.json`. To nie jest osobny kandydat refaktoryzacji (nie zmienia struktury kodu appki), ale jest tanim, wysokowartościowym prerekwizytem — patrz sekcja rankingu.
+An additional finding outside the original list, but critical to assessing every candidate's feasibility: **no CI job typechecks `backend/src`.** The root `tsconfig.json:12` explicitly excludes `backend`; `backend-tests` in CI only calls `vitest run`, never its own `npm run typecheck` script from `backend/package.json`. This isn't a separate refactor candidate (it doesn't change the app's code structure), but it's a cheap, high-value prerequisite — see the ranking section.
 
-## Per-kandydat
+## Per-candidate
 
-### C1 — Zduplikowany insert do `tasks`
+### C1 — Duplicated insert into `tasks`
 
-**Obecny kształt (evidence):** `backend/src/routes/transcribe.ts:49-52` i `backend/src/routes/tasks.ts:54-57` — identyczny blok `supabase.from('tasks').insert(texts.map(text => ({ text }))).select()`. Cały `backend/src/` to 8 plików; nie istnieje żaden `store/`, `repository/`, `db/` ani inny moduł dostępu do danych (potwierdzone przez pełny listing katalogu + grep). Jedyne współdzielone jest samo połączenie (`SupabaseClient` z `middleware/auth.ts`), nie zapytanie.
+**Current shape (evidence):** `backend/src/routes/transcribe.ts:49-52` and `backend/src/routes/tasks.ts:54-57` — an identical block, `supabase.from('tasks').insert(texts.map(text => ({ text }))).select()`. All of `backend/src/` is 8 files; there is no `store/`, `repository/`, `db/`, or any other data-access module (confirmed by a full directory listing + grep). The only thing shared is the connection itself (`SupabaseClient` from `middleware/auth.ts`), not the query.
 
-**Werdykt intencjonalności:** **przypadkowe/nierewidowane.** `tasks.ts` powstał w commicie `200a433` (2026-06-12 12:51), `transcribe.ts` 37 minut później w `6876ddc` — insert skopiowany, nie wydzielony. Każdy plik ma dokładnie jeden commit w całej historii — nigdy nie wrócono do tego miejsca. Żaden komentarz nie uzasadnia braku wspólnej funkcji.
+**Intentionality verdict:** **accidental/unrevisited.** `tasks.ts` was created in commit `200a433` (2026-06-12 12:51), `transcribe.ts` 37 minutes later in `6876ddc` — the insert was copied, not extracted. Each file has exactly one commit in its whole history — this spot was never revisited. No comment justifies the lack of a shared function.
 
-**Wykonalność:** Najmniejszy odwracalny krok — jedna funkcja `insertTasks(supabase, texts)` w nowym module (np. `backend/src/db/tasks.ts`), wołana z obu routerów. **Bezpieczne dla istniejących testów**: `fake-supabase.ts` jawnie nie inspekcjonuje argumentów `.insert()` (komentarz w pliku to przyznaje), więc refaktor nie może przypadkiem zepsuć `tasks.test.ts`. **Ale ta sama własność to podwójna krawędź**: skoro fake nie sprawdza argumentów, CI też nie złapie _błędnie_ wykonanej ekstrakcji (np. literówki w nazwie kolumny) — bezpieczeństwo testów działa tylko w jedną stronę (nie zepsuje starych testów, ale nie zweryfikuje nowego kodu).
+**Feasibility:** The smallest reversible step — a single function, `insertTasks(supabase, texts)`, in a new module (e.g. `backend/src/db/tasks.ts`), called from both routers. **Safe for existing tests**: `fake-supabase.ts` explicitly doesn't inspect `.insert()` arguments (a comment in the file admits this), so the refactor can't accidentally break `tasks.test.ts`. **But that same property cuts both ways**: since the fake doesn't check arguments, CI also won't catch an _incorrectly_ done extraction (e.g. a typo in a column name) — the test safety net only works in one direction (it won't break old tests, but it won't verify the new code either).
 
-### C2 — Zduplikowany `TaskStatus`/`TASK_STATUSES`
+### C2 — Duplicated `TaskStatus`/`TASK_STATUSES`
 
-**Obecny kształt (evidence):** `src/types.ts:1-2` i `backend/src/types.ts:22-23` — identyczne. Potwierdzone: brak `workspaces` w root `package.json`, brak `pnpm-workspace.yaml`/`turbo.json`/`nx.json` gdziekolwiek w repo. To dwa w pełni niezależne projekty npm (RN app przy rootcie, Worker w `backend/`) bez żadnego mechanizmu współdzielenia kodu.
+**Current shape (evidence):** `src/types.ts:1-2` and `backend/src/types.ts:22-23` — identical. Confirmed: no `workspaces` in the root `package.json`, no `pnpm-workspace.yaml`/`turbo.json`/`nx.json` anywhere in the repo. These are two fully independent npm projects (the RN app at the root, the Worker in `backend/`) with no code-sharing mechanism at all.
 
-**Werdykt intencjonalności:** **przypadkowe/nierewidowane.** `backend/src/types.ts` powstał pierwszy (`200a433`), `src/types.ts` dwa dni później (`831452a`) — kopia, nie import. Żaden komentarz, żaden fragment `context/foundation/tech-stack.md` nie adresuje strategii współdzielenia typów między RN a Workerem — dokument uzasadnia wybór stacku, nie tę konkretną granicę.
+**Intentionality verdict:** **accidental/unrevisited.** `backend/src/types.ts` was created first (`200a433`), `src/types.ts` two days later (`831452a`) — a copy, not an import. No comment, no part of `context/foundation/tech-stack.md`, addresses a strategy for sharing types between the RN app and the Worker — the document justifies the stack choice, not this specific boundary.
 
-**Wykonalność (trzy opcje, realnie ocenione pod ten toolchain):**
+**Feasibility (three options, assessed realistically for this toolchain):**
 
-- **(a) Skrypt kontraktowy** porównujący obie tablice przez `deep-equal`, uruchamiany jako nowy krok CI (nie w Jest ani w Vitest — żaden z obu runnerów nie obejmuje obu katalogów naraz). Efekt: **niski-średni koszt**, ~10 linii skryptu + jeden nowy krok CI. Nic takiego dziś nie istnieje.
-- **(b) Codegen** jednego pliku z drugiego. **Średni koszt** — `Task` (interfejs) różni się między plikami, więc to nie kopia całego pliku, tylko blok wydzielony znacznikami. Backend ma już `typegen` (`wrangler types`), ale generuje typy bindingów Workera, nie typy domenowe — nie da się tego rozszerzyć bez dodatkowej logiki.
-- **(c) Komentarz „keep in sync"** wskazujący na odpowiednik w drugim pliku. **Trywialny koszt, zero automatycznego egzekwowania** — CI nigdy nie złapie dryfu.
-- Brak istniejącej infrastruktury (hook pre-commit, reguła lint) do doczepienia którejkolwiek opcji — każda wymaga nowego kroku od zera.
+- **(a) A contract script** comparing both arrays with `deep-equal`, run as a new CI step (not in Jest or Vitest — neither runner spans both directories at once). Effect: **low-medium cost**, ~10 lines of script + one new CI step. Nothing like this exists today.
+- **(b) Codegen** one file from the other. **Medium cost** — the `Task` interface differs between the files, so this isn't a whole-file copy, only a marker-delimited block. The backend already has `typegen` (`wrangler types`), but it generates Worker binding types, not domain types — can't be extended for this without extra logic.
+- **(c) A "keep in sync" comment** pointing at the counterpart in the other file. **Trivial cost, zero automatic enforcement** — CI will never catch drift.
+- No existing infrastructure (a pre-commit hook, a lint rule) to piggyback any option on — each needs a new step from scratch.
 
-### C3 — Brak transakcyjności przy częściowej awarii
+### C3 — No transactionality on partial failure
 
-**Obecny kształt (evidence):** `backend/src/routes/transcribe.ts:46-53` — między udaną ekstrakcją a próbą insertu nie ma żadnego logowania ani zapisu pośredniego. Brak jakiegokolwiek mechanizmu outbox/kolejki/draft w całym `backend/` (potwierdzone grepem) i brak logowania w ogóle w `backend/src` (zero wystąpień `console.*`).
+**Current shape (evidence):** `backend/src/routes/transcribe.ts:46-53` — between a successful extraction and the insert attempt, there's no logging or intermediate write at all. No outbox/queue/draft mechanism anywhere in `backend/` (confirmed by grep), and no logging at all in `backend/src` (zero `console.*` occurrences).
 
-**Werdykt intencjonalności:** **unknown/skłaniające się ku przypadkowemu — najsłabszy dowód z czterech.** Plik ma dokładnie jeden commit w historii. Komentarz przy handlerze (`transcribe.ts:8-12`) mówi o „jasnym stanie błędu", nie o zachowaniu już wykonanej pracy. PRD (`prd.md:116-117`) ma zasadę prywatności o nieprzechowywaniu surowego audio (nie dotyczy tego przypadku — to już wyekstrahowany tekst) i zasadę o jasnym stanie błędu przy problemach z siecią (pasuje częściowo, ale nie mówi nic o retry/cache). Żadne źródło nie dyskutuje wprost tego konkretnego kompromisu. Ten sam brak transakcyjności występuje symetrycznie w `tasks.ts` — spójna konwencja, nie odosobniony błąd, ale spójność ≠ świadoma decyzja.
+**Intentionality verdict:** **unknown/leaning accidental — the weakest evidence of the four.** The file has exactly one commit in its history. The comment next to the handler (`transcribe.ts:8-12`) talks about a "clear error state," not about preserving work already done. The PRD (`prd.md:116-117`) has a privacy rule about not retaining raw audio (doesn't apply here — this is already-extracted text) and a rule about a clear error state on connectivity problems (partially fits, but says nothing about retry/cache). No source discusses this specific trade-off directly. The same lack of transactionality exists symmetrically in `tasks.ts` — a consistent convention, not an isolated bug, but consistency ≠ a deliberate decision.
 
-**Wykonalność:** Najmniejszy krok — `console.error('task-insert-failed', { texts, transcript, error })` w gałęzi błędu (`transcribe.ts:53`), jedna linia, w pełni odwracalna. Ograniczenie: `wrangler.toml` nie ma bloku `[observability]`, więc bez dodatkowej (osobnej, małej) zmiany konfiguracji log nie ma gdzie trwale wylądować poza aktywną sesją `wrangler tail`. Pełne rozwiązanie (tabela outbox + retry) to realna zmiana schematu — nieodwracalna w jednym kroku, poza zakresem „najmniejszego kroku".
+**Feasibility:** The smallest step — `console.error('task-insert-failed', { texts, transcript, error })` on the error branch (`transcribe.ts:53`), one line, fully reversible. Limitation: `wrangler.toml` has no `[observability]` block, so without an additional (separate, small) config change, the log has nowhere durable to land beyond an active `wrangler tail` session. The full solution (an outbox table + retry) is a real schema change — not reversible in one step, out of scope for the "smallest step."
 
-### C4 — Brak generyka `Database` na kliencie Supabase
+### C4 — No `Database` generic on the Supabase client
 
-**Obecny kształt (evidence):** `backend/src/supabase.ts:15-20,27-32` — `createClient(...)` bez `<Database>`. Brak wygenerowanych typów schematu gdziekolwiek w repo (brak `database.types.ts`, brak `supabase/migrations/`). Supabase CLI nie jest zależnością w żadnym `package.json`.
+**Current shape (evidence):** `backend/src/supabase.ts:15-20,27-32` — `createClient(...)` without `<Database>`. No generated schema types anywhere in the repo (no `database.types.ts`, no `supabase/migrations/`). The Supabase CLI isn't a dependency in any `package.json`.
 
-**Werdykt intencjonalności:** **przypadkowe/nierewidowane.** Plik ma komentarz `LOAD-BEARING` (`supabase.ts:5-14`), ale dotyczy wyłącznie nadpisania `fetch` dla `workerd` — nie typowania. `context/foundation/infrastructure.md`'s rejestr ryzyk (7 pozycji) nie wymienia brakujących typów schematu ani razu.
+**Intentionality verdict:** **accidental/unrevisited.** The file has a `LOAD-BEARING` comment (`supabase.ts:5-14`), but it's only about the `fetch` override for `workerd` — not typing. `context/foundation/infrastructure.md`'s risk register (7 items) never mentions missing schema types.
 
-**Wykonalność:** Generowanie typów wymaga `npx supabase gen types typescript` — bez lokalnych migracji (potwierdzone: brak `supabase/migrations/`) jedyna droga to `--project-id` przeciw żywemu projektowi Supabase, czyli zależność operacyjna, nie tylko kodowa. **Nieznane (inference, nie zweryfikowane):** czy dodanie generyka będzie czysto addytywne, czy ujawni istniejące niedopasowania typów (np. `(body as any).texts` w `tasks.ts:45`, nietypowany `patch: Record<string, unknown>` w `tasks.ts:69-84`) — realistycznie prawdopodobne, ale nie zweryfikowane bez faktycznego wygenerowania typów.
+**Feasibility:** Generating types requires `npx supabase gen types typescript` — without local migrations (confirmed: no `supabase/migrations/`) the only route is `--project-id` against a live Supabase project, i.e. an operational dependency, not just a code one. **Unknown (inference, not verified):** whether adding the generic would be purely additive or would surface existing type mismatches (e.g. `(body as any).texts` in `tasks.ts:45`, the untyped `patch: Record<string, unknown>` in `tasks.ts:69-84`) — realistically likely, but not verified without actually generating the types.
 
-**Najostrzejsze pojedyncze odkrycie tego researchu:** nawet gdyby C4 ujawniło realne błędy typów, **CI by ich nie złapało** — bo, jak ustalono wyżej, żaden job nie uruchamia `tsc --noEmit` dla `backend/src`. To samo ograniczenie osłabia siatkę bezpieczeństwa dla wszystkich czterech kandydatów w częściach, które są czysto typowe.
+**The single sharpest finding of this research:** even if C4 surfaced real type errors, **CI wouldn't catch them** — because, as established above, no job runs `tsc --noEmit` for `backend/src`. That same limitation weakens the safety net for all four candidates wherever the fix is purely a type-level one.
 
 ## Refactor opportunities (ranking)
 
-1. **C1 — wydzielić `insertTasks()` do wspólnej funkcji.** Najwyższa wartość przy najniższym koszcie: usuwa potwierdzoną duplikację, jest w pełni bezpieczne względem istniejących testów (nie zepsuje ich), i tworzy jedno miejsce, w którym przyszłe prace nad C3 (logowanie błędu insertu) i C4 (typowanie) będą musiały żyć tylko raz, nie dwa razy. Blast radius: 2 pliki w `backend/src/routes/` + 1 nowy moduł. Pierwszy krok-prerekwizyt: żaden — można zacząć od razu.
+1. **C1 — extract `insertTasks()` into a shared function.** Highest value at the lowest cost: removes confirmed duplication, is fully safe against existing tests (won't break them), and creates a single place where future work on C3 (insert-error logging) and C4 (typing) will only need to live once, not twice. Blast radius: 2 files in `backend/src/routes/` + 1 new module. First prerequisite step: none — can start right away.
 
-2. **Tani, szybki zysk niezależnie od rankingu — włączyć `backend` typecheck w CI.** Nie jest jednym z czterech nazwanych kandydatów (nie zmienia struktury appki), ale to jednolinijkowa zmiana w `.github/workflows/ci.yml` (dodać krok `npm run typecheck` do joba `backend-tests`, skrypt już istnieje w `backend/package.json:13`) o nieproporcjonalnie dużej wartości: to jedyna dźwignia, która realnie wzmacnia siatkę bezpieczeństwa pod C1, C3 i zwłaszcza C4. Rekomendacja: zrobić to przed, albo razem z, C4.
+2. **A cheap, quick win regardless of the ranking — turn on `backend` typecheck in CI.** Not one of the four named candidates (it doesn't change the app's code structure), but it's a one-line change in `.github/workflows/ci.yml` (add an `npm run typecheck` step to the `backend-tests` job; the script already exists in `backend/package.json:13`) with disproportionately high value: it's the single lever that genuinely strengthens the safety net under C1, C3, and especially C4. Recommendation: do this before, or together with, C4.
 
-3. **C2 — lekki skrypt kontraktowy (opcja a) jako pierwszy krok.** Realny problem, ale bez dobrego darmowego rozwiązania — żadna z trzech opcji nie piggybackuje na istniejącej infrastrukturze. Opcja (a) daje automatyczne egzekwowanie przy najniższym koszcie spośród opcji, które w ogóle coś egzekwują. Blast radius: nowy plik skryptu + jeden krok CI, zero zmian w kodzie produkcyjnym. Pierwszy krok-prerekwizyt: żaden.
+3. **C2 — a lightweight contract script (option a) as a first step.** A real problem, but with no good free solution — none of the three options piggybacks on existing infrastructure. Option (a) gives automatic enforcement at the lowest cost among the options that enforce anything at all. Blast radius: a new script file + one CI step, zero changes to production code. First prerequisite step: none.
 
-4. **C4 — dodać generyk `Database`, ale dopiero po #2.** Wartościowe (typowany insert/update zamyka część ryzyka z C1 na stałe), ale wymaga zależności operacyjnej (żywy projekt Supabase do `gen types`) i realnie może ujawnić dziś ukryte niedopasowania typów w `tasks.ts` — robienie tego bez włączonego backendowego typecheck w CI (#2) oznacza wysyłanie zmiany typów bez żadnej automatycznej weryfikacji. Pierwszy krok-prerekwizyt: #2 (włączony CI typecheck dla `backend/`).
+4. **C4 — add the `Database` generic, but only after #2.** Valuable (a typed insert/update permanently closes part of C1's risk), but requires an operational dependency (a live Supabase project for `gen types`) and could realistically surface hidden type mismatches in `tasks.ts` today — doing this without backend typecheck enabled in CI (#2) means shipping a type change with no automatic verification at all. First prerequisite step: #2 (CI typecheck enabled for `backend/`).
 
-5. **C3 — najpierw samo logowanie, nie pełna transakcyjność.** Najsłabszy dowód intencjonalności z czterech i najmniej dojrzała siatka bezpieczeństwa (zero testów na `transcribe.ts` w ogóle). Jednoliniowe `console.error` na gałęzi błędu to tani krok, ale jego wartość jest ograniczona bez skonfigurowanej trwałej obserwowalności (`wrangler.toml` `[observability]`) — bez tego log istnieje tylko podczas aktywnej sesji `wrangler tail`. Rekomendacja: potraktować jako część już zaplanowanej `test-plan.md` Fazy 2 („AI pipeline error-handling coverage"), nie jako osobny refaktor teraz.
+5. **C3 — logging first, not full transactionality.** The weakest intentionality evidence of the four and the least mature safety net (zero tests on `transcribe.ts` at all). A one-line `console.error` on the error branch is a cheap step, but its value is limited without configured durable observability (`wrangler.toml` `[observability]`) — without that, the log only exists during an active `wrangler tail` session. Recommendation: treat as part of the already-planned `test-plan.md` Phase 2 ("AI pipeline error-handling coverage"), not as a separate refactor now.
 
-### Odrzucone / nie-kandydaci
+### Rejected / non-candidates
 
-- **Zero testów na pipeline (5/6 plików)** — nie jest kandydatem refaktoryzacji z definicji (nie zmienia struktury kodu). Już nazwane i zaplanowane w `context/foundation/test-plan.md` jako ryzyko #1, Faza 2, status „not started". Ta zmiana go nie duplikuje.
-- **Animacja Reanimated w `record-button.tsx`** — bugfix, nie problem strukturalny; poza zakresem tej lekcji (M4L4 nie obejmuje debugowania — to M5).
+- **Zero tests on the pipeline (5/6 files)** — not a refactor candidate by definition (doesn't change code structure). Already named and planned in `context/foundation/test-plan.md` as risk #1, Phase 2, status "not started." This change doesn't duplicate it.
+- **Reanimated animation in `record-button.tsx`** — a bugfix, not a structural problem; out of scope for this lesson (M4L4 doesn't cover debugging — that's M5).
 
 ## Code References
 
-- `backend/src/routes/transcribe.ts:49-52`, `backend/src/routes/tasks.ts:54-57` — duplikacja C1
-- `src/types.ts:1-2`, `backend/src/types.ts:22-23` — duplikacja C2
-- `backend/src/routes/transcribe.ts:46-53` — brak transakcyjności C3
-- `backend/src/supabase.ts:15-20,27-32` — nietypowany klient C4
-- `.github/workflows/ci.yml:10-30,32-67`, `tsconfig.json:12`, `backend/package.json:13` — luka w CI typecheck dla backendu
-- `backend/test/support/fake-supabase.ts:13-31` — fake nie inspekcjonuje argumentów insert/update
-- `context/foundation/infrastructure.md` (rejestr ryzyk, 7 pozycji) — brak wzmianki o typach schematu
-- `context/foundation/prd.md:116-117` — zasady prywatności/błędów, nie dotyczą wprost C3
+- `backend/src/routes/transcribe.ts:49-52`, `backend/src/routes/tasks.ts:54-57` — C1 duplication
+- `src/types.ts:1-2`, `backend/src/types.ts:22-23` — C2 duplication
+- `backend/src/routes/transcribe.ts:46-53` — C3 no transactionality
+- `backend/src/supabase.ts:15-20,27-32` — C4 untyped client
+- `.github/workflows/ci.yml:10-30,32-67`, `tsconfig.json:12`, `backend/package.json:13` — the backend CI typecheck gap
+- `backend/test/support/fake-supabase.ts:13-31` — the fake doesn't inspect insert/update arguments
+- `context/foundation/infrastructure.md` (risk register, 7 items) — no mention of schema types
+- `context/foundation/prd.md:116-117` — privacy/error rules, don't directly apply to C3
 
 ## Architecture Insights
 
-Wszystkie cztery kandydaty łączy jeden wzorzec: powstały w bardzo krótkich, jednorazowych seriach commitów (repo ma 43 commity w 3 miesiące) i nigdy nie zostały rewidowane. To nie jest legacy w sensie „wielu autorów, sprzeczne decyzje" — to raczej „zbudowane szybko, działa, nikt jeszcze nie musiał wracać". Brak `store`/`repository` warstwy w backendzie jest przyczyną strukturalną, dla której C1 w ogóle mogło powstać tak łatwo — jeden plik z tą warstwą uczyniłby duplikację trudniejszą niż jej brak.
+All four candidates share one pattern: they were created in very short, one-shot bursts of commits (the repo has 43 commits in 3 months) and never revisited. This isn't legacy in the "many authors, conflicting decisions" sense — it's more "built quickly, it works, nobody has had to come back yet." The lack of a `store`/`repository` layer in the backend is the structural reason C1 could arise so easily at all — one file with that layer would have made the duplication harder than not doing it.
 
 ## Historical Context (from prior changes)
 
-- `context/changes/voice-task-pipeline/research.md` — źródło wszystkich czterech kandydatów, traktowane jako dowód, nie wyprowadzane na nowo.
-- `context/map/repo-map.md` — strefy ryzyka, z których wybrano pipeline głos→zadanie jako cel Deep Focus.
+- `context/changes/voice-task-pipeline/research.md` — the source of all four candidates, treated as evidence, not re-derived.
+- `context/map/repo-map.md` — the risk zones from which the voice-to-task pipeline was chosen as the Deep Focus target.
 
 ## Related Research
 
 - `context/changes/voice-task-pipeline/research.md`
 
-## Weryfikacja twierdzeń strukturalnych (ast-grep / grep)
+## Structural claim verification (ast-grep / grep)
 
-| Twierdzenie                                                                                         | Metoda                                                   | Wynik                                                                                                                     | Werdykt          |
-| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| `backend/src` ma tylko 3 podkatalogi (`ai`, `middleware`, `routes`), brak `store`/`repository`/`db` | `find backend/src -type d`                               | dokładnie 3 podkatalogi, żaden nie pasuje do wzorca data-access                                                           | **potwierdzone** |
-| Zero `console.*` w `backend/src`                                                                    | `grep -rn "console\." backend/src/`                      | brak wyników                                                                                                              | **potwierdzone** |
-| Brak `supabase/migrations/` dla tego projektu                                                       | `find . -iname migrations` (poza `node_modules`/`tools`) | tylko wewnętrzne foldery migracji bibliotek klienckich Supabase w `node_modules` — nic w kodzie projektu                  | **potwierdzone** |
-| Root `package.json` bez pola `workspaces`                                                           | `grep -n "workspaces" package.json`                      | brak wyników                                                                                                              | **potwierdzone** |
-| `backend-tests` w CI nie wywołuje `npm run typecheck`, tylko `npm test`                             | odczyt `.github/workflows/ci.yml:32-67` w całości        | jedyne kroki to `npm ci` i `npm test` — brak jakiegokolwiek `typecheck`                                                   | **potwierdzone** |
-| Root `tsconfig.json` jawnie wyklucza `backend`                                                      | `grep -n "exclude" -A3 tsconfig.json`                    | `"exclude": ["node_modules", "tools", "backend", "dist", ".expo/web-build"]`                                              | **potwierdzone** |
-| `fake-supabase.ts` nie inspekcjonuje argumentów `insert`/`update`                                   | odczyt pliku, linie 10-24                                | komentarz wprost: „Arguments passed to chain methods are not inspected"; `insert: () => builder`, `update: () => builder` | **potwierdzone** |
+| Claim                                                                                                | Method                                                      | Result                                                                                                                              | Verdict       |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `backend/src` has only 3 subdirectories (`ai`, `middleware`, `routes`), no `store`/`repository`/`db` | `find backend/src -type d`                                  | exactly 3 subdirectories, none match a data-access pattern                                                                          | **confirmed** |
+| Zero `console.*` in `backend/src`                                                                    | `grep -rn "console\." backend/src/`                         | no results                                                                                                                          | **confirmed** |
+| No `supabase/migrations/` for this project                                                           | `find . -iname migrations` (outside `node_modules`/`tools`) | only internal migration folders of Supabase's own client libraries in `node_modules` — nothing in the project's code                | **confirmed** |
+| Root `package.json` has no `workspaces` field                                                        | `grep -n "workspaces" package.json`                         | no results                                                                                                                          | **confirmed** |
+| `backend-tests` in CI doesn't call `npm run typecheck`, only `npm test`                              | reading `.github/workflows/ci.yml:32-67` in full            | the only steps are `npm ci` and `npm test` — no `typecheck` at all                                                                  | **confirmed** |
+| The root `tsconfig.json` explicitly excludes `backend`                                               | `grep -n "exclude" -A3 tsconfig.json`                       | `"exclude": ["node_modules", "tools", "backend", "dist", ".expo/web-build"]`                                                        | **confirmed** |
+| `fake-supabase.ts` doesn't inspect `insert`/`update` arguments                                       | reading the file, lines 10-24                               | comment states it directly: "Arguments passed to chain methods are not inspected"; `insert: () => builder`, `update: () => builder` | **confirmed** |
 
-Zero twierdzeń obalonych lub doprecyzowanych — ranking i werdykty intencjonalności pozostają bez zmian.
+No claim was disproved or refined — the ranking and intentionality verdicts stand unchanged.
 
 ## Open Questions
 
-- Czy dodanie generyka `Database` do klienta Supabase (C4) faktycznie ujawni istniejące niedopasowania typów w `tasks.ts` — nie zweryfikowane bez realnego wygenerowania typów (wymaga żywego projektu Supabase).
-- `context/foundation/test-plan.md` samo jest częściowo nieaktualne względem stanu repo (opisuje brak testów backendu, które już istnieją) — wart osobnej aktualizacji, poza zakresem tej zmiany.
+- Whether adding the `Database` generic to the Supabase client (C4) would actually surface existing type mismatches in `tasks.ts` — not verified without actually generating the types (requires a live Supabase project).
+- `context/foundation/test-plan.md` itself is partly out of date relative to the repo's actual state (it describes an absence of backend tests that already exist) — worth a separate update, out of scope for this change.

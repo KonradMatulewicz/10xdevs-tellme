@@ -4,75 +4,75 @@ created: 2026-09-04
 type: refactor-plan
 ---
 
-# Niezmiennik i agregat-strażnik — tekst tasku nigdy nie jest pusty
+# Invariant and guard aggregate — task text is never empty
 
-**Produkt tego dokumentu to PLAN, nie implementacja.** Żaden kod nie został zmieniony.
+**This document's product is a PLAN, not an implementation.** No code has been changed.
 
-## Krok 1 — Zidentyfikowane niezmienniki
+## Step 1 — Identified invariants
 
-Z `context/domain/01-domain-distillation.md` (Krok 3) i bezpośredniej lektury kodu:
+From `context/domain/01-domain-distillation.md` (Step 3) and direct reading of the code:
 
-1. **Tekst tasku nigdy nie jest pusty/białoznakowy** — dorozumiane z `context/foundation/prd.md:124` („an ordered list of task strings" — pusty string nie jest „distinct actionable item"), egzekwowane w dwóch niezależnych miejscach.
-2. **Użytkownik widzi/modyfikuje wyłącznie własne taski** — `prd.md:130`, egzekwowane przez Postgres RLS, potwierdzone `backend/test/idor.test.ts`.
-3. **Dokładnie jedno źródło prawdy o stanie sesji** — dorozumiane, egzekwowane strukturalnie przez `AuthContext`, ale port bywa omijany (patrz `03-anti-corruption-layer.md`).
+1. **A task's text is never empty/whitespace-only** — implied by `context/foundation/prd.md:124` ("an ordered list of task strings" — an empty string isn't a "distinct actionable item"), enforced in two independent places.
+2. **A user sees/modifies only their own tasks** — `prd.md:130`, enforced by Postgres RLS, confirmed by `backend/test/idor.test.ts`.
+3. **Exactly one source of truth for session state** — implied, enforced structurally by `AuthContext`, but the port is sometimes bypassed (see `03-anti-corruption-layer.md`).
 
-## Krok 2 — Klasyfikacja i wybór #1
+## Step 2 — Classification and selecting #1
 
-| Niezmiennik                | (a) Rdzeniowość                    | (b) Rozsmarowanie                                                                                                                                                                                                                           | (c) Egzekwowanie                                                                 |
-| -------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| 1. Tekst tasku niepusty    | Wysoka — dotyczy `Task`, bytu Core | 2 niezależne miejsca (`ai/extract.ts:51`, `routes/tasks.ts:50-51`), **plus trzecie: żaden insert nie ma gwarancji na poziomie typu** (`texts: string[]` w `insertTasks` — patrz `plan.md` z L4 — nie wyklucza pustego stringa w sygnaturze) | Naruszalne: dwie kopie reguły mogą się rozjechać przy zmianie jednej bez drugiej |
-| 2. Izolacja per-user (RLS) | Wysoka                             | 1 miejsce (polityka RLS w Supabase)                                                                                                                                                                                                         | Egzekwowane i **przetestowane na żywej sieci** — najsilniejszy z trzech          |
-| 3. Jedno źródło sesji      | Średnia (Supporting, nie Core)     | 1 „miejsce" strukturalnie (`AuthContext`), ale bywa omijane w praktyce                                                                                                                                                                      | Deklarowane, ale naruszalne — patrz ACL                                          |
+| Invariant                   | (a) Core-ness                         | (b) How spread out                                                                                                                                                                                                                      | (c) Enforcement                                                                 |
+| --------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 1. Task text non-empty      | High — concerns `Task`, a Core entity | 2 independent places (`ai/extract.ts:51`, `routes/tasks.ts:50-51`), **plus a third: no insert has a type-level guarantee** (`texts: string[]` in `insertTasks` — see L4's `plan.md` — doesn't exclude an empty string in the signature) | Violable: the two copies of the rule can drift if one changes without the other |
+| 2. Per-user isolation (RLS) | High                                  | 1 place (the RLS policy in Supabase)                                                                                                                                                                                                    | Enforced and **tested on a live network** — the strongest of the three          |
+| 3. Single session source    | Medium (Supporting, not Core)         | 1 "place" structurally (`AuthContext`), but bypassed in practice                                                                                                                                                                        | Declared, but violable — see ACL                                                |
 
-**Wybór: #1 — tekst tasku niepusty.** Jest jednocześnie najbardziej rdzeniowy (dotyczy bytu Core, `Task`) i najsłabiej egzekwowany (dwie niezależne kopie reguły, zero typu, który by ją wymuszał strukturalnie). #2 jest silniejszy i sprawdzony — nie wymaga interwencji. #3 jest realny, ale to Supporting, nie Core, i ma osobny, właściwy dla siebie wzorzec naprawy (ACL, nie agregat) — patrz `03-anti-corruption-layer.md`.
+**Choice: #1 — task text non-empty.** It is simultaneously the most core (concerns `Task`, a Core entity) and the weakest enforced (two independent copies of the rule, no type that structurally enforces it). #2 is stronger and verified — no intervention needed. #3 is real, but it's Supporting, not Core, and has its own, more fitting repair pattern (ACL, not an aggregate) — see `03-anti-corruption-layer.md`.
 
-## Krok 3 — Diagnoza
+## Step 3 — Diagnosis
 
-Reguła dziś żyje w dwóch miejscach, każde z inną formą egzekwowania:
+The rule lives today in two places, each with a different form of enforcement:
 
-- **`backend/src/ai/extract.ts:51`**: `parsed.tasks.map((t) => (typeof t === 'string' ? t.trim() : '')).filter(Boolean)` — ekstrakcja z Claude przechodzi przez `.trim()` + `.filter(Boolean)`, więc pusty/białoznakowy string nigdy nie dotrze dalej z tej ścieżki.
-- **`backend/src/routes/tasks.ts:50-51`**: `const texts = raw.map((t) => (typeof t === 'string' ? t.trim() : '')).filter(Boolean); if (texts.length === 0) return c.json({ error: 'provide a non-empty `text`or`texts`' }, 400);` — ręczny endpoint `POST /tasks` ma swoją, osobno napisaną, niemal identyczną logikę.
-- **`backend/src/routes/transcribe.ts:36-53`**: **nie waliduje niczego samodzielnie** — ufa, że `extractTasks()` już to zrobiło. To działa dziś (bo `extract.ts:51` faktycznie filtruje), ale nic w typie zwracanym przez `extractTasks(): Promise<string[]>` tego nie gwarantuje — sygnatura pozwala na dowolny `string[]`, łącznie z pustymi elementami. Ktoś zmieniający `extract.ts` (np. usuwający `.filter(Boolean)` przy refaktorze promptu) złamałby regułę cicho, bo `routes/transcribe.ts` nigdy sam jej nie sprawdza.
-- **Klient nie waliduje wcale** — `PATCH /tasks/:id` (`tasks.ts:70-73`) sprawdza niepusty `text` przy edycji, ale to trzecia, znowu osobna kopia tej samej reguły.
+- **`backend/src/ai/extract.ts:51`**: `parsed.tasks.map((t) => (typeof t === 'string' ? t.trim() : '')).filter(Boolean)` — Claude's extraction goes through `.trim()` + `.filter(Boolean)`, so an empty/whitespace string never gets further down this path.
+- **`backend/src/routes/tasks.ts:50-51`**: `const texts = raw.map((t) => (typeof t === 'string' ? t.trim() : '')).filter(Boolean); if (texts.length === 0) return c.json({ error: 'provide a non-empty `text`or`texts`' }, 400);` — the manual `POST /tasks` endpoint has its own, separately written, near-identical logic.
+- **`backend/src/routes/transcribe.ts:36-53`**: **doesn't validate anything itself** — trusts that `extractTasks()` already did. This works today (because `extract.ts:51` does actually filter), but nothing in `extractTasks()`'s return type, `Promise<string[]>`, guarantees it — the signature allows any `string[]`, including empty elements. Someone changing `extract.ts` (e.g. removing `.filter(Boolean)` while refactoring the prompt) would silently break the rule, because `routes/transcribe.ts` never checks it itself.
+- **The client doesn't validate at all** — `PATCH /tasks/:id` (`tasks.ts:70-73`) checks for non-empty `text` on edit, but that's a third, again separate, copy of the same rule.
 
-Żadna warstwa nie jest jedynym strażnikiem. Reguła jest „rozsmarowana" po trzech miejscach (ekstrakcja, POST /tasks, PATCH /tasks/:id), z których jedno (`transcribe.ts`) polega wyłącznie na tym, że sąsiad (`extract.ts`) się nie zmieni.
+No layer is the sole guardian. The rule is "spread out" across three places (extraction, POST /tasks, PATCH /tasks/:id), one of which (`transcribe.ts`) relies entirely on its neighbor (`extract.ts`) never changing.
 
-## Krok 4 — Projekt agregatu-strażnika
+## Step 4 — Guard aggregate design
 
-**Zbieg okoliczności wart wykorzystania**: `context/changes/refactor-opportunities/plan.md` (L4, już zaplanowane, jeszcze niezaimplementowane) tworzy `backend/src/db/tasks.ts::insertTasks(supabase, texts)` jako jedyne miejsce insertu do `tasks` — dokładnie z innego powodu (usunięcie duplikacji C1). To jest naturalna granica agregatu dla tego niezmiennika: zamiast dodawać czwarte, osobne miejsce walidacji, ten sam punkt, który L4 już centralizuje dla insertu, powinien też być jedynym miejscem walidacji.
+**A coincidence worth using**: `context/changes/refactor-opportunities/plan.md` (L4, already planned, not yet implemented) creates `backend/src/db/tasks.ts::insertTasks(supabase, texts)` as the single place that inserts into `tasks` — for an entirely different reason (removing C1's duplication). This is the natural aggregate boundary for this invariant: instead of adding a fourth, separate validation spot, the same point L4 is already centralizing for the insert should also be the single place that validates.
 
-- **Rozszerzona sygnatura** (rozszerzenie planu L4, nie nowy byt): `insertTasks(supabase, texts: string[])` **rzuca nazwany błąd domenowy** (np. `EmptyTaskTextError`), jeśli po `.trim()` którykolwiek element jest pusty, zamiast cicho pomijać (dzisiejsze zachowanie w `extract.ts`/`tasks.ts` to _filtrowanie_, nowe zachowanie to _odrzucenie z jawnym błędem_ — patrz „Before/after" niżej dla uzasadnienia zmiany zachowania).
-- **Precondition**: `texts` niepuste jako tablica (co najmniej jeden element po trim) i każdy element niepusty po trim.
-- **Wywołujący** (`routes/tasks.ts`, `routes/transcribe.ts`) łapie `EmptyTaskTextError` i mapuje na istniejący kształt odpowiedzi 400/422 — bez zmiany kontraktu HTTP.
-- **`PATCH /tasks/:id`** (edycja pojedynczego tasku) to osobna operacja (update, nie insert) — poza zakresem `insertTasks`, ale powinna wołać tę samą walidującą funkcję pomocniczą (np. wydzielić `assertNonEmptyText(text: string): string` używaną przez oba miejsca), żeby nie zostawić trzeciej kopii reguły.
+- **Extended signature** (an extension of the L4 plan, not a new entity): `insertTasks(supabase, texts: string[])` **throws a named domain error** (e.g. `EmptyTaskTextError`) if, after `.trim()`, any element is empty, instead of silently skipping it (today's behavior in `extract.ts`/`tasks.ts` is _filtering_, the new behavior is _rejection with an explicit error_ — see "Before/after" below for why the behavior should change).
+- **Precondition**: `texts` is non-empty as an array (at least one element after trim) and every element is non-empty after trim.
+- **Callers** (`routes/tasks.ts`, `routes/transcribe.ts`) catch `EmptyTaskTextError` and map it onto the existing 400/422 response shape — no change to the HTTP contract.
+- **`PATCH /tasks/:id`** (editing a single task) is a separate operation (update, not insert) — out of scope for `insertTasks`, but should call the same validating helper function (e.g. extract `assertNonEmptyText(text: string): string` used by both places), so as not to leave a third copy of the rule.
 
-## Krok 5 — Before / after, plan, testy
+## Step 5 — Before / after, plan, tests
 
 **Before:**
 
-- `extract.ts:51` — filtruje ciszej (nie błąd, po prostu pomija)
-- `tasks.ts:50-51` — waliduje i zwraca 400, jeśli **wszystkie** elementy puste (nie odrzuca częściowo pustych — `['zrób pranie', '']` przejdzie jako `['zrób pranie']`, cicho tracąc informację, że drugi element był pusty)
-- `tasks.ts:70-73` (PATCH) — trzecia, osobna kopia
+- `extract.ts:51` — filters quietly (not an error, just skips)
+- `tasks.ts:50-51` — validates and returns 400 only if **all** elements are empty (doesn't reject partially-empty input — `['do laundry', '']` passes as `['do laundry']`, silently losing the fact that the second element was empty)
+- `tasks.ts:70-73` (PATCH) — a third, separate copy
 
 **After:**
 
-- Jedna funkcja pomocnicza `assertNonEmptyText` używana przez `insertTasks` (dla batch) i `PATCH` (dla pojedynczej edycji)
-- Zachowanie przy częściowo pustych elementach staje się **jawną decyzją do podjęcia w planie implementacji** (dziś ciche filtrowanie w `extract.ts`, ale `tasks.ts` już dziś różni się subtelnie — to jest dokładnie ten rodzaj cichej niespójności, który agregat ma wyeliminować, nie tylko przenieść)
+- One helper function, `assertNonEmptyText`, used by both `insertTasks` (for batches) and `PATCH` (for single edits)
+- The behavior for partially-empty input becomes **an explicit decision to make in the implementation plan** (today's silent filtering in `extract.ts` vs. `tasks.ts` already subtly differing — exactly the kind of quiet inconsistency the aggregate is meant to eliminate, not just relocate)
 
-**Plan faz (do wykonania jako osobna zmiana, `/10x-new`/`/10x-plan`, po tym jak L4's `refactor-opportunities` wyląduje):**
+**Phase plan (to be executed as a separate change, `/10x-new`/`/10x-plan`, after L4's `refactor-opportunities` lands):**
 
-1. Test-first: charakteryzujący test dla dzisiejszego zachowania `extract.ts`/`tasks.ts` na pustych/białoznakowych elementach (utrwala _obecne_, nie _docelowe_ zachowanie — zgodnie z regułą „dodaj test, zanim dotkniesz" z M4L4).
-2. Dodać `assertNonEmptyText` + `EmptyTaskTextError` jako nowy, odosobniony kod (nie dotyka jeszcze wywołań).
-3. Wpiąć w `insertTasks` (przy okazji L4's C1) i w `PATCH /tasks/:id`.
-4. Usunąć zduplikowaną walidację z `tasks.ts:50-51` i `ai/extract.ts:51` (zamienić na wywołanie wspólnej funkcji lub usunąć, jeśli `insertTasks` już to gwarantuje).
+1. Test-first: a characterization test for today's `extract.ts`/`tasks.ts` behavior on empty/whitespace elements (pins down _current_, not _target_, behavior — per M4L4's "add a test before you touch" rule).
+2. Add `assertNonEmptyText` + `EmptyTaskTextError` as new, isolated code (doesn't touch call sites yet).
+3. Wire it into `insertTasks` (piggybacking on L4's C1) and into `PATCH /tasks/:id`.
+4. Remove the duplicated validation from `tasks.ts:50-51` and `ai/extract.ts:51` (replace with a call to the shared function, or remove if `insertTasks` already guarantees it).
 
-**Przypadki testowe (legalne/nielegalne):**
+**Test cases (legal/illegal):**
 
-- Legalne: `['zrób pranie']`, `['zrób pranie', 'zadzwoń do mamy']`
-- Nielegalne: `['']`, `['   ']`, `['zrób pranie', '']` (częściowo puste — zachowanie do jawnej decyzji w planie, nie tutaj)
-- Brzegowe: tablica pusta `[]` (dziś `transcribe.ts:42-45` ma na to osobną, poprawną obsługę — „zero tasks" to explicit 200, nie błąd; nie mylić z „lista z pustym elementem")
+- Legal: `['do laundry']`, `['do laundry', 'call mom']`
+- Illegal: `['']`, `['   ']`, `['do laundry', '']` (partially empty — behavior is an explicit decision for the plan, not here)
+- Edge case: an empty array `[]` (today `transcribe.ts:42-45` already handles this correctly, separately — "zero tasks" is an explicit 200, not an error; don't confuse this with "a list containing an empty element")
 
-## Ograniczenia
+## Limitations
 
-- Cytaty zweryfikowane bezpośrednim odczytem plików w tej sesji (`extract.ts`, `tasks.ts`, `transcribe.ts`) — nie przez ast-grep w tym dokumencie (to plan, nie research zakończony metrykami; L3/L4's `research.md` już mają pełną weryfikację ast-grep dla powiązanych twierdzeń o duplikacji insertu).
-- Ten plan zakłada, że L4's `refactor-opportunities/plan.md` (C1: `insertTasks()`) wyląduje first — jeśli kolejność się zmieni, agregat i tak może powstać samodzielnie, tylko traci naturalny punkt zaczepienia.
+- Citations verified by directly reading the files in this session (`extract.ts`, `tasks.ts`, `transcribe.ts`) — not via ast-grep in this document (this is a plan, not a research pass concluded with metrics; L3/L4's `research.md` files already have full ast-grep verification for the related insert-duplication claims).
+- This plan assumes L4's `refactor-opportunities/plan.md` (C1: `insertTasks()`) lands first — if the order changes, the aggregate can still be built on its own, it just loses its natural anchor point.

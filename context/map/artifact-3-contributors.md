@@ -4,26 +4,26 @@ type: map-artifact
 created: 2026-09-04
 ---
 
-# Artifact 3 — Kontekst kontrybutorów
+# Artifact 3 — Contributor context
 
-**Ta składowa jest w tym repo w dużej mierze zdegenerowana i mówię to wprost, zamiast udawać głębię, której nie ma.** Lekcja M4L2 projektuje tę analizę pod repo z wieloma kontrybutorami (Mattermost: dziesiątki osób) — cel to znaleźć „kogo zapytać". Tellme ma jednego autora pod dwiema tożsamościami gita (`Konrad Matulewicz`, `Konrad.M` — ta sama osoba, różna konfiguracja gita między maszynami/sesjami). Nie ma nikogo do zapytania poza tobą. Sekcja „Kogo zapytać" w `repo-map.md` będzie więc krótka i inna niż w przykładzie z lekcji — zamiast osób, wskaże **które change-idy / dokumenty** niosą kontekst dla danego obszaru.
+**This component is largely degenerate in this repo, and I'm saying so plainly instead of faking a depth that isn't there.** Lesson M4L2 designs this analysis for a repo with many contributors (Mattermost: dozens of people) — the goal is to find "who to ask." Tellme has one author under two git identities (`Konrad Matulewicz`, `Konrad.M` — the same person, different git config across machines/sessions). There's no one to ask besides you. The "Who to ask" section in `repo-map.md` will therefore be short and different from the lesson's example — instead of people, it points at **which change-ids / documents** carry context for a given area.
 
-## To, co historia mimo wszystko pokazuje: klastry tematyczne w czasie
+## What history still shows despite that: topical clusters over time
 
-Z motywów commitów (`artifact-1-territory.md`) i dat:
+From commit themes (`artifact-1-territory.md`) and dates:
 
-| Okres (przybliżony)   | Temat                                                                   | Dowód                                                                                                                                                                               |
-| --------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Start (2026-06-10)    | bootstrap Expo + toolkit 10x                                            | commity `chore`, `feat(expo)`                                                                                                                                                       |
-| Środek                | fundament testowy backendu                                              | `feat(testing-backend-test-foundation)` ×2, `docs(testing-backend-test-foundation)`, `context/changes/testing-backend-test-foundation/`                                             |
-| Środek–koniec         | auth: sign-in, OAuth Google, reset hasła                                | `feat(complete-auth-oauth-reset)` ×3, `fix(complete-auth-oauth-reset)`, `docs(complete-auth-oauth-reset)`, `context/changes/complete-auth-oauth-reset/` (4 pliki, w tym `reviews/`) |
-| Ciągłe                | CI                                                                      | `fix(ci)` ×5 — najliczniejsza pojedyncza kategoria w całej historii                                                                                                                 |
-| Brak wyraźnego okresu | pipeline głos→zadanie (`record-button`, `routes/transcribe.ts`, `ai/*`) | brak dedykowanego change-id w historii — zbudowany, ale nigdy nie przeszedł przez ten sam proces `research → plan → implement` co auth                                              |
+| Period (approximate) | Topic                                                                    | Evidence                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start (2026-06-10)   | Expo + 10x toolkit bootstrap                                             | `chore`, `feat(expo)` commits                                                                                                                                                       |
+| Middle               | backend test foundation                                                  | `feat(testing-backend-test-foundation)` ×2, `docs(testing-backend-test-foundation)`, `context/changes/testing-backend-test-foundation/`                                             |
+| Middle–end           | auth: sign-in, Google OAuth, password reset                              | `feat(complete-auth-oauth-reset)` ×3, `fix(complete-auth-oauth-reset)`, `docs(complete-auth-oauth-reset)`, `context/changes/complete-auth-oauth-reset/` (4 files, incl. `reviews/`) |
+| Continuous           | CI                                                                       | `fix(ci)` ×5 — the largest single category across the whole history                                                                                                                 |
+| No clear period      | voice-to-task pipeline (`record-button`, `routes/transcribe.ts`, `ai/*`) | no dedicated change-id in the history — built, but never went through the same `research → plan → implement` process as auth                                                        |
 
-## Co to naprawdę mówi (interpretacja, nie tylko fakt)
+## What this actually says (interpretation, not just fact)
 
-Auth przeszło pełny, udokumentowany cykl zmiany (change-id, plan, review). Pipeline głos→zadanie — czyli **rdzeń produktu** — najwyraźniej nie: nie ma dla niego własnego `context/changes/*`, mimo że to on jest właściwym powodem istnienia appki („Speak it. We'll list it." — hasło z ekranu głównego). To jest dokładnie ten rodzaj obserwacji, którego szuka ta składowa: nie „kto", ale „który obszar nigdy nie dostał tej samej uwagi procesowej co reszta" — i to on trafia do L3 (Deep Focus) w tej ścieżce właśnie z tego powodu.
+Auth went through a full, documented change cycle (change-id, plan, review). The voice-to-task pipeline — the **product's core** — apparently did not: it has no `context/changes/*` of its own, even though it's the actual reason the app exists ("Speak it. We'll list it." — the tagline on the home screen). This is exactly the kind of observation this component looks for: not "who," but "which area never got the same process attention as the rest" — and that's precisely why it's the target for L3 (Deep Focus) in this track.
 
-## Ograniczenie do zapisania wprost
+## A limitation worth stating outright
 
-Brak ADR-ów i brak wielu autorów oznacza, że w L4 (refaktoryzacja) „historia jako test intencji" nie będzie mogła się oprzeć na `git blame` prowadzącym do innej osoby do zapytania — oprze się wyłącznie na treści commitów i na komentarzach w kodzie. Ten drugi kanał jest w tym repo niezwykle dobry: pliki jak `backend/src/supabase.ts` czy `src/components/record-button.tsx` mają inline'owe uzasadnienia decyzji („LOAD-BEARING", „Reanimated temporarily removed to isolate an iOS-only freeze") które w typowym legacy trzeba by rekonstruować z archeologii gita — tutaj są już zapisane. To zmniejsza, ale nie zeruje, potrzebę `git log -L`/blame w L4.
+The lack of ADRs and the lack of multiple authors means that in L4 (refactoring), "history as an intent test" won't be able to lean on `git blame` pointing to another person to ask — it will rely solely on commit content and on comments in the code. That second channel is unusually good in this repo: files like `backend/src/supabase.ts` or `src/components/record-button.tsx` carry inline reasoning for decisions ("LOAD-BEARING", "Reanimated temporarily removed to isolate an iOS-only freeze") that in a typical legacy codebase would have to be reconstructed from git archaeology — here it's already written down. That reduces, but doesn't eliminate, the need for `git log -L`/blame in L4.

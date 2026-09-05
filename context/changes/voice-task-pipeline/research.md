@@ -21,135 +21,135 @@ last_updated_by: Claude (10x-research)
 
 ## Research Question
 
-Deep Focus na przepływ głos→zadanie (`record-button.tsx` → `onRecord` → `lib/api.ts::transcribe` → `POST /transcribe` → Whisper → Claude → Supabase insert → `fetchTasks`/UI), wskazany w `context/map/repo-map.md` jako Strefa ryzyka #1: jedyny obszar appki bez testów po obu stronach, który nigdy nie przeszedł przez pełny cykl `research → plan`. Cel: **Feature overview** (przepływ, nie spis plików) i **Technical debt** (konkretne ryzyka, evidence/inference/unknown), zero refaktoru i zero decyzji na tym etapie.
+Deep Focus on the voice-to-task flow (`record-button.tsx` → `onRecord` → `lib/api.ts::transcribe` → `POST /transcribe` → Whisper → Claude → Supabase insert → `fetchTasks`/UI), flagged in `context/map/repo-map.md` as Risk zone #1: the only area of the app with no tests on either side, which has never gone through a full `research → plan` cycle. Goal: **Feature overview** (the flow, not a file list) and **Technical debt** (concrete risks, evidence/inference/unknown), zero refactor and zero decisions at this stage.
 
 ## Summary
 
-Pipeline działa jako prosty, liniowy łańcuch (nagranie → Whisper → Claude → Supabase insert → GET refetch → render), bez cykli, bez optimistic UI dla samego nagrywania (w przeciwieństwie do `onUpdate`, które _jest_ optimistic). Zewnętrzne SDK (Cloudflare Workers AI, Anthropic) są dobrze izolowane — to nie jest źródło ryzyka. Ryzyko siedzi gdzie indziej: **zero testów** na 5 z 6 plików ścieżki (6. ma tylko przypadkowy test 401, nie sięgający właściwej logiki), **zduplikowany, nietypowany insert** do Supabase w dwóch routerach bez niczego, co złapałoby rozjazd, **zduplikowany `TaskStatus`** między klientem a backendem bez wspólnego źródła, i **brak transakcyjności** przy częściowej awarii (transkrypcja + ekstrakcja się udały, zapis nie — koszt poniesiony, dane utracone). Najważniejsze: `context/foundation/test-plan.md` **już nazywa dokładnie to ryzyko** jako pozycję #1 w rejestrze ryzyk i przypisuje je do Fazy 2, ze statusem „not started" — ta analiza nie odkrywa nowego problemu, potwierdza i pogłębia już zapisany.
+The pipeline runs as a simple, linear chain (recording → Whisper → Claude → Supabase insert → GET refetch → render), with no cycles, and no optimistic UI for the recording itself (unlike `onUpdate`, which _is_ optimistic). External SDKs (Cloudflare Workers AI, Anthropic) are well isolated — not a source of risk. The risk lives elsewhere: **zero tests** on 5 of 6 files on the path (the 6th has only an incidental 401 test that never reaches the real logic), a **duplicated, untyped insert** into Supabase across two routers with nothing to catch drift, a **duplicated `TaskStatus`** between client and backend with no shared source, and **no transactionality** on partial failure (transcription + extraction succeed, the save doesn't — cost incurred, data lost). Most important: `context/foundation/test-plan.md` **already names exactly this risk** as item #1 in its risk register and assigns it to Phase 2, status "not started" — this analysis doesn't discover a new problem, it confirms and deepens one already on record.
 
 ## ➡️ Feature overview
 
-Przepływ, nie spis plików — od naciśnięcia przycisku do zadania na liście:
+The flow, not a file list — from button tap to a task in the list:
 
-1. **Start nagrywania.** Tap na `RecordButton` (`src/components/record-button.tsx:16`, czysto prezentacyjny) woła `onRecord` w `src/app/(app)/index.tsx:84-113`: prosi o uprawnienia mikrofonu, startuje `useAudioRecorder` (`expo-audio`), `setRecordState('recording')`.
-2. **Stop i wysyłka.** Drugi tap wchodzi w gałąź `src/app/(app)/index.tsx:62-81`: `setRecordState('busy')` (przycisk pokazuje spinner i jest zablokowany — `record-button.tsx:16,23-24`), `recorder.stop()`, potem `transcribe(recorder.uri)` z `src/lib/api.ts:49-65`. Ta funkcja buduje `FormData` (osobna gałąź web/native dla kształtu pliku), dokleja nagłówek `Authorization` z aktualnej sesji Supabase (`api.ts:9-14`) i strzela `POST /transcribe`.
-3. **Serwer: autoryzacja.** `requireAuth` (`backend/src/middleware/auth.ts:13-22`) wymaga bearer tokena, buduje klienta Supabase noszącego ten token (RLS robi resztę), **nie weryfikuje podpisu JWT lokalnie** — świadoma decyzja udokumentowana w komentarzu (limit 10ms CPU free-tier Workera).
-4. **Transkrypcja.** `transcribeAudio` (`backend/src/ai/transcribe.ts:11-21`) koduje audio do base64 i woła binding Cloudflare Workers AI (`whisper-large-v3-turbo`). Surowe audio nigdy nie trafia do żadnego store'a — trzymane tylko w pamięci requestu.
-5. **Ekstrakcja zadań.** `extractTasks` (`backend/src/ai/extract.ts:31-52`) woła Claude (`claude-opus-4-8`) z wymuszonym JSON schema (`{ tasks: string[] }`), `effort: 'low'`, żeby zmieścić się w budżecie 10s z PRD. Reguła biznesowa wprost w promptcie: jeden task na jeden wypowiedziany element, bez scalania, bez wymyślania.
-6. **Zapis.** Jeśli `texts.length > 0`, insert do Supabase `tasks` przez klienta RLS-scoped (`backend/src/routes/transcribe.ts:48-53`). Odpowiedź: `{ transcript, tasks: data }`, HTTP 201.
-7. **Powrót do klienta — kluczowe znalezisko.** Klient **nie** wstawia zwróconych `tasks` bezpośrednio do stanu UI. `onRecord` (`index.tsx:69-75`) liczy tylko `added.length` na banner, po czym woła `load()` → `fetchTasks()` → osobny `GET /tasks` → `setTasks(...)`. Innymi słowy: **lista odświeża się przez pełny refetch, nie przez dane z odpowiedzi `/transcribe`.** To nie jest optimistic UI — w przeciwieństwie do `onUpdate` (`index.tsx:115-130`), które _jest_ jawnie optimistic (komentarz w kodzie to nazywa) i dopiero przy błędzie robi `load()` jako rekoncyliację.
-8. **Render.** `FlatList` w `index.tsx:185-202` renderuje `TaskCard` na każdy task ze świeżo pobranej listy.
+1. **Start recording.** A tap on `RecordButton` (`src/components/record-button.tsx:16`, purely presentational) calls `onRecord` in `src/app/(app)/index.tsx:84-113`: requests mic permission, starts `useAudioRecorder` (`expo-audio`), `setRecordState('recording')`.
+2. **Stop and send.** A second tap enters the branch at `src/app/(app)/index.tsx:62-81`: `setRecordState('busy')` (the button shows a spinner and is disabled — `record-button.tsx:16,23-24`), `recorder.stop()`, then `transcribe(recorder.uri)` from `src/lib/api.ts:49-65`. That function builds a `FormData` (a separate web/native branch for the file shape), attaches the `Authorization` header from the current Supabase session (`api.ts:9-14`), and fires `POST /transcribe`.
+3. **Server: authorization.** `requireAuth` (`backend/src/middleware/auth.ts:13-22`) requires a bearer token, builds a Supabase client carrying that token (RLS does the rest), **doesn't verify the JWT signature locally** — a deliberate decision documented in a comment (the Worker free tier's 10ms CPU cap).
+4. **Transcription.** `transcribeAudio` (`backend/src/ai/transcribe.ts:11-21`) base64-encodes the audio and calls the Cloudflare Workers AI binding (`whisper-large-v3-turbo`). The raw audio never reaches any store — held only in the request's memory.
+5. **Task extraction.** `extractTasks` (`backend/src/ai/extract.ts:31-52`) calls Claude (`claude-opus-4-8`) with an enforced JSON schema (`{ tasks: string[] }`), `effort: 'low'`, to fit inside the PRD's 10s budget. The business rule is stated directly in the prompt: one task per spoken item, no merging, no inventing.
+6. **Save.** If `texts.length > 0`, insert into Supabase `tasks` through the RLS-scoped client (`backend/src/routes/transcribe.ts:48-53`). Response: `{ transcript, tasks: data }`, HTTP 201.
+7. **Return to the client — a key finding.** The client does **not** insert the returned `tasks` directly into UI state. `onRecord` (`index.tsx:69-75`) only uses `added.length` for the banner, then calls `load()` → `fetchTasks()` → a separate `GET /tasks` → `setTasks(...)`. In other words: **the list refreshes through a full refetch, not through the data in the `/transcribe` response.** This is not optimistic UI — unlike `onUpdate` (`index.tsx:115-130`), which _is_ explicitly optimistic (a comment in the code names it as such) and only calls `load()` as reconciliation on error.
+8. **Render.** The `FlatList` in `index.tsx:185-202` renders a `TaskCard` for each task from the freshly fetched list.
 
-**Walidacja i stan błędu po drodze:** trzy różne, rozróżnialne stany pustki/błędu po stronie serwera — `422 no speech detected` (pusty transkrypt), `200 { tasks: [] }` (transkrypt był, ale zero zadań — to nie błąd, celowy stan), `502` (Whisper lub Claude rzuciły wyjątek, w tym `stop_reason === 'refusal'` z klasyfikatora bezpieczeństwa Claude). Klient mapuje wszystko poza pustą listą na baner z komunikatem błędu i wraca do `idle`, bez wywołania `load()`.
+**Validation and error states along the way:** three distinct, distinguishable empty/error states on the server side — `422 no speech detected` (empty transcript), `200 { tasks: [] }` (there was a transcript but zero tasks — not an error, a deliberate state), `502` (Whisper or Claude threw, including `stop_reason === 'refusal'` from Claude's safety classifier). The client maps everything except the empty-list case to an error banner and returns to `idle`, without calling `load()`.
 
 ## 🔧 Technical debt
 
-Rozróżnienie evidence / inference / unknown zachowane z podresearchów.
+The evidence / inference / unknown distinction is preserved from the sub-research passes.
 
-### 1. Zero testów na 5 z 6 plików ścieżki (evidence)
+### 1. Zero tests on 5 of 6 files on the path (evidence)
 
-- `record-button.tsx`, `index.tsx::onRecord`, `api.ts::transcribe`, `ai/transcribe.ts`, `ai/extract.ts` — **żaden test ich nie importuje ani nie wywołuje.**
-- `backend/src/routes/transcribe.ts` ma dokładnie jeden przypadkowy test: `auth-gate.test.ts` sprawdza 401 przy braku tokena, dzielony z trzema innymi trasami — nigdy nie dochodzi do właściwej logiki handlera (parsowanie formularza, wywołanie Whisper/Claude, insert).
-- Kontrast: CRUD (`tasks.test.ts` 15 przypadków) + auth-gate (5) + IDOR na żywej sieci (2) + recovery (14) = **31 przypadków** pokrywających happy path, walidację, błędy backendu, 404 i granicę autoryzacji cross-user. Backend biegnie w CI (`.github/workflows/ci.yml`, job `backend-tests`); frontendowy Jest **nie biegnie w CI wcale** (`lint-typecheck` robi tylko lint + `tsc --noEmit` + prettier, bez `npm test`).
-- **To nie jest nienazwane ryzyko.** `context/foundation/test-plan.md:42` wymienia dokładnie to jako pozycję #1 rejestru ryzyk („Transcription/extraction fails or hangs without a distinct, actionable error state"), Impact: High, Likelihood: High, przypisane do Fazy 2 („AI pipeline error-handling coverage"), **status: not started**. `test-plan.md:92` potwierdza: „API mocking: none yet" — nie ma nawet infrastruktury do mockowania Whisper/Claude.
+- `record-button.tsx`, `index.tsx::onRecord`, `api.ts::transcribe`, `ai/transcribe.ts`, `ai/extract.ts` — **no test imports or calls any of them.**
+- `backend/src/routes/transcribe.ts` has exactly one incidental test: `auth-gate.test.ts` checks for a 401 when the token is missing, shared with three other routes — it never reaches the handler's actual logic (form parsing, calling Whisper/Claude, the insert).
+- Contrast: CRUD (`tasks.test.ts` 15 cases) + auth-gate (5) + IDOR on a live network (2) + recovery (14) = **31 cases** covering the happy path, validation, backend errors, 404s, and the cross-user authorization boundary. Backend tests run in CI (`.github/workflows/ci.yml`, the `backend-tests` job); frontend Jest **doesn't run in CI at all** (`lint-typecheck` only does lint + `tsc --noEmit` + prettier, no `npm test`).
+- **This isn't an unnamed risk.** `context/foundation/test-plan.md:42` lists exactly this as risk-register item #1 ("Transcription/extraction fails or hangs without a distinct, actionable error state"), Impact: High, Likelihood: High, assigned to Phase 2 ("AI pipeline error-handling coverage"), **status: not started**. `test-plan.md:92` confirms: "API mocking: none yet" — there isn't even infrastructure to mock Whisper/Claude.
 
-### 2. Zduplikowany insert bez niczego, co złapie rozjazd (evidence)
+### 2. Duplicated insert with nothing to catch drift (evidence)
 
-- `backend/src/routes/transcribe.ts:48-52` i `backend/src/routes/tasks.ts:53-57` mają identyczny blok `.from('tasks').insert(texts.map(text => ({ text }))).select()`, zbudowany niezależnie w dwóch osobnych, sekwencyjnych commitach (najpierw CRUD, potem pipeline głosowy — insert skopiowany, nie wydzielony).
-- **Nic by tego nie złapało:** `createClient()` w `backend/src/supabase.ts` jest wołany bez generyka `Database` — `.insert()` przyjmuje dowolny kształt na etapie kompilacji. Fake Supabase w testach (`backend/test/support/fake-supabase.ts`) jawnie **nie sprawdza argumentów** przekazywanych do `.insert()`/`.eq()` (komentarz w pliku to przyznaje wprost). Backendowy `typecheck` (`backend/package.json` skrypt) **nie jest wołany w CI** — tylko `vitest run`.
-- Konsekwencja: nowa wymagana kolumna dodana do jednego insertu, a zapomniana w drugim, przejdzie kompilację, przejdzie wszystkie istniejące testy i przejdzie CI — ujawni się dopiero jako błąd Postgresa w runtime (albo, gdy kolumna jest nullable, wcale się nie ujawni).
+- `backend/src/routes/transcribe.ts:48-52` and `backend/src/routes/tasks.ts:53-57` have an identical block, `.from('tasks').insert(texts.map(text => ({ text }))).select()`, built independently in two separate, sequential commits (CRUD first, then the voice pipeline — the insert was copied, not extracted).
+- **Nothing would catch this:** `createClient()` in `backend/src/supabase.ts` is called without the `Database` generic — `.insert()` accepts any shape at compile time. The fake Supabase in tests (`backend/test/support/fake-supabase.ts`) explicitly **doesn't inspect arguments** passed to `.insert()`/`.eq()` (a comment in the file admits this outright). The backend's `typecheck` (a `backend/package.json` script) **is never called in CI** — only `vitest run`.
+- Consequence: a new required column added to one insert and forgotten in the other will compile, pass every existing test, and pass CI — surfacing only as a Postgres runtime error (or, if the column is nullable, not surfacing at all).
 
-### 3. `TaskStatus`/`TASK_STATUSES` zduplikowany bez wspólnego źródła (evidence)
+### 3. `TaskStatus`/`TASK_STATUSES` duplicated with no shared source (evidence)
 
-- `src/types.ts:1-2` i `backend/src/types.ts:22-23` — identyczne znak w znak, zero importu, zero codegenu między nimi (potwierdzone: żaden skrypt w żadnym `package.json` tego nie generuje). Pełna analiza domenowa: `context/domain/01-domain-distillation.md`.
+- `src/types.ts:1-2` and `backend/src/types.ts:22-23` — identical byte for byte, zero import, zero codegen between them (confirmed: no script in any `package.json` generates this). Full domain analysis: `context/domain/01-domain-distillation.md`.
 
-### 4. Brak transakcyjności przy częściowej awarii (evidence + inference)
+### 4. No transactionality on partial failure (evidence + inference)
 
-- Jeśli insert w kroku 6 zwróci błąd po tym, jak Whisper i Claude już się wykonały (koszt poniesiony), handler zwraca `500 { error: error.message }` i **odrzuca transkrypt i wyekstrahowane teksty** — brak retry, brak fallbacku, brak cache po stronie klienta pozwalającego ponowić bez powtórnego nagrywania (potwierdzone brakiem takiego kodu — to jest inference: nie zweryfikowano runtime, ale nie znaleziono żadnego mechanizmu, który by temu zaprzeczał).
-- Ten sam brak transakcyjności istnieje symetrycznie w `routes/tasks.ts`, więc to spójna, choć krucha, konwencja w całym backendzie — nie odosobniony błąd tej jednej ścieżki.
+- If the insert in step 6 returns an error after Whisper and Claude have already run (cost incurred), the handler returns `500 { error: error.message }` and **discards the transcript and the extracted texts** — no retry, no fallback, no client-side cache that would allow a retry without re-recording (confirmed by the absence of such code — this is inference: not verified at runtime, but no mechanism contradicting it was found either).
+- The same lack of transactionality exists symmetrically in `routes/tasks.ts`, so this is a consistent, if fragile, convention across the whole backend — not an isolated bug on this one path.
 
-### 5. Znany, nie domknięty dług UI (evidence)
+### 5. A known, unresolved UI debt (evidence)
 
-- `src/components/record-button.tsx:10-11`: `// Reanimated temporarily removed to isolate an iOS-only freeze. The pulse ring is static for now; restore the animation once the root cause is fixed.` — świadomy, udokumentowany, ale wciąż otwarty dług na głównym CTA appki.
+- `src/components/record-button.tsx:10-11`: `// Reanimated temporarily removed to isolate an iOS-only freeze. The pulse ring is static for now; restore the animation once the root cause is fixed.` — deliberate, documented, but still open debt on the app's main CTA.
 
-### 6. Sekrety środowiskowe rozproszone (evidence, low severity)
+### 6. Environment secrets are scattered (evidence, low severity)
 
-- `backend/wrangler.toml` deklaruje tylko binding `AI` — `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY` żyją poza nim (`wrangler secret put` / `.dev.vars`), udokumentowane w `context/deployment/deploy-plan.md` i `.env.example`. `deploy-plan.md:111` odnotowuje już jeden przypadek osieroconego sekretu (`OPENAI_API_KEY` po zmianie dostawcy) — dowód, że higiena sekretów tu jest ręczna i już raz dryfowała. **Unknown**: czy produkcyjny Worker ma dziś komplet trzech sekretów — nie da się zweryfikować z samego repo.
+- `backend/wrangler.toml` only declares the `AI` binding — `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY` live outside it (`wrangler secret put` / `.dev.vars`), documented in `context/deployment/deploy-plan.md` and `.env.example`. `deploy-plan.md:111` already notes one orphaned-secret case (`OPENAI_API_KEY` left behind after a vendor swap) — evidence that secret hygiene here is manual and has already drifted once. **Unknown**: whether the production Worker currently has all three secrets set correctly — unverifiable from the repo alone.
 
-### Co NIE jest długiem (żeby nie przesadzić w drugą stronę)
+### What is NOT debt (so as not to overcorrect)
 
-- **Izolacja SDK jest już dobra.** `@cloudflare/workers-types`/`Ai` i `@anthropic-ai/sdk` są zamknięte wyłącznie w `ai/transcribe.ts` i `ai/extract.ts`; router przekazuje tylko surowy binding i string klucza, nigdy typ vendora. To przykład granicy, która działa — nie kandydat do zmiany.
-- **Frontend nie przecieka Supabase SDK na tej ścieżce** — `api.ts` i `index.tsx` nie importują `@supabase/supabase-js` bezpośrednio, tylko przez `lib/supabase.ts`/`lib/auth.tsx`.
-- **Niska liczba współzmian `record-button.tsx`↔`api.ts` (2 na 43 commity) nie jest sama w sobie dowodem problemu** — strukturalnie wynika z tego, że `record-button.tsx` jest czystym komponentem prezentacyjnym bez importu sieciowego kodu. To zdrowy podział, nie zaniedbanie samo w sobie (choć w połączeniu z punktami 1-2 czyta się jako „zbudowane raz i nigdy nie odwiedzone ponownie" — patrz inference w blast-radius powyżej).
+- **SDK isolation is already good.** `@cloudflare/workers-types`/`Ai` and `@anthropic-ai/sdk` are sealed entirely inside `ai/transcribe.ts` and `ai/extract.ts`; the router only passes through the raw binding and the key string, never a vendor type. An example of a boundary that works — not a candidate for change.
+- **The frontend doesn't leak the Supabase SDK on this path** — `api.ts` and `index.tsx` don't import `@supabase/supabase-js` directly, only through `lib/supabase.ts`/`lib/auth.tsx`.
+- **The low co-change count for `record-button.tsx`↔`api.ts` (2 out of 43 commits) isn't proof of a problem by itself** — it follows structurally from `record-button.tsx` being a pure presentational component with no networking import. A healthy split, not neglect in itself (though combined with points 1-2 it reads as "built once and never revisited" — see the inference in blast radius above).
 
 ## Detailed Findings
 
 ### Trace end-to-end
 
-Pełna sekwencja krok po kroku z cytatami `plik:linia` i diagramem Mermaid: patrz sekcja **Feature overview** wyżej dla streszczenia; kroki, gałęzie błędów (transcribeAudio throw → 502, pusty transkrypt → 422, zero tasks → 200 pusta lista, refusal klasyfikatora Claude → 502, błąd insertu → 500) i pełny diagram sekwencji zostały zweryfikowane plik po pliku przez dedykowanego subagenta; kluczowe cytaty:
+Full step-by-step sequence with `file:line` citations and a Mermaid diagram: see the **Feature overview** section above for the summary; the steps, error branches (transcribeAudio throw → 502, empty transcript → 422, zero tasks → 200 empty list, Claude classifier refusal → 502, insert error → 500) and the full sequence diagram were verified file by file by a dedicated sub-agent; key citations:
 
-- `src/app/(app)/index.tsx:62-113` (`onRecord`, obie gałęzie)
+- `src/app/(app)/index.tsx:62-113` (`onRecord`, both branches)
 - `src/lib/api.ts:49-65` (`transcribe()`)
-- `backend/src/routes/transcribe.ts:19-56` (cały handler, trzy try/catch)
+- `backend/src/routes/transcribe.ts:19-56` (the whole handler, three try/catch blocks)
 - `backend/src/ai/transcribe.ts:11-21`, `backend/src/ai/extract.ts:31-52`
 
 ### Test gaps
 
-Zob. Technical debt §1. Pełna tabela plik-po-pliku (4 pliki frontendowe, 5 backendowych, kto co pokrywa) i porównanie z `tasks.test.ts`/`idor.test.ts`/`recovery.test.ts` została zebrana przez dedykowanego subagenta; najważniejszy pojedynczy cytat: `test-plan.md:42` już nazywa ten dokładny gap jako ryzyko #1.
+See Technical debt §1. A full file-by-file table (4 frontend files, 5 backend files, what each covers) and the comparison with `tasks.test.ts`/`idor.test.ts`/`recovery.test.ts` was gathered by a dedicated sub-agent; the single most important citation: `test-plan.md:42` already names this exact gap as risk #1.
 
 ### Blast radius
 
-Zob. Technical debt §2-4. Zweryfikowano wprost: brak generyka `Database` na kliencie Supabase (`backend/src/supabase.ts`), brak inspekcji argumentów w fake'u testowym (`backend/test/support/fake-supabase.ts:13-15`), brak `typecheck` w CI dla backendu (`backend/package.json` skrypt zdefiniowany, nigdzie niewołany w `.github/workflows/ci.yml`).
+See Technical debt §2-4. Directly verified: no `Database` generic on the Supabase client (`backend/src/supabase.ts`), no argument inspection in the test fake (`backend/test/support/fake-supabase.ts:13-15`), no backend `typecheck` in CI (a `backend/package.json` script exists, never called anywhere in `.github/workflows/ci.yml`).
 
 ## Code References
 
-- `src/components/record-button.tsx:10-32` — komponent + udokumentowany dług (animacja)
-- `src/app/(app)/index.tsx:46-60,62-113,115-130` — `load()`, `onRecord`, `onUpdate` (optimistic vs nie)
+- `src/components/record-button.tsx:10-32` — component + documented debt (animation)
+- `src/app/(app)/index.tsx:46-60,62-113,115-130` — `load()`, `onRecord`, `onUpdate` (optimistic vs not)
 - `src/lib/api.ts:9-14,22-31,33-44,49-65` — `authHeader`, `fetchTasks`, `updateTask`, `transcribe`
-- `backend/src/routes/transcribe.ts:16,19-56` — auth gate + cały handler
-- `backend/src/routes/tasks.ts:53-57` — zduplikowany insert
-- `backend/src/ai/transcribe.ts:11-21`, `backend/src/ai/extract.ts:12-52` — porty do Whisper/Claude
-- `backend/src/middleware/auth.ts:13-22` — brama auth, świadomie bez weryfikacji podpisu JWT
-- `backend/src/supabase.ts:15-32` — klienci Supabase, `LOAD-BEARING` `global: { fetch }`, brak generyka `Database`
-- `src/types.ts:1-2` / `backend/src/types.ts:22-23` — zduplikowany `TaskStatus`
-- `context/foundation/test-plan.md:42,66-67,92,114,117` — ryzyko #1, faza 2 (not started), brak mockowania AI, gate CI frontend (Faza 5, not started)
-- `.github/workflows/ci.yml:10-30,32-67` — co faktycznie biegnie w CI (backend tak, frontend Jest nie)
-- `backend/test/support/fake-supabase.ts:13-31` — fake nie inspekcjonuje argumentów insert/update
+- `backend/src/routes/transcribe.ts:16,19-56` — auth gate + the whole handler
+- `backend/src/routes/tasks.ts:53-57` — duplicated insert
+- `backend/src/ai/transcribe.ts:11-21`, `backend/src/ai/extract.ts:12-52` — ports to Whisper/Claude
+- `backend/src/middleware/auth.ts:13-22` — auth gate, deliberately without JWT signature verification
+- `backend/src/supabase.ts:15-32` — Supabase clients, `LOAD-BEARING` `global: { fetch }`, no `Database` generic
+- `src/types.ts:1-2` / `backend/src/types.ts:22-23` — duplicated `TaskStatus`
+- `context/foundation/test-plan.md:42,66-67,92,114,117` — risk #1, Phase 2 (not started), no AI mocking, frontend CI gate (Phase 5, not started)
+- `.github/workflows/ci.yml:10-30,32-67` — what actually runs in CI (backend yes, frontend Jest no)
+- `backend/test/support/fake-supabase.ts:13-31` — the fake doesn't inspect insert/update arguments
 
 ## Architecture Insights
 
-- Pipeline jest liniowy i bez cykli (potwierdzone też grafem `madge` w `context/map/artifact-2-structure.md`) — złożoność nie jest strukturalna (rozgałęzienia, warstwy), tylko **proceduralna**: trzy sekwencyjne wywołania zewnętrzne (Whisper, Claude, Supabase) bez transakcji obejmującej całość.
-- Wzorzec „refetch zamiast optimistic" na ścieżce nagrywania kontrastuje świadomie z `onUpdate`, które jest optimistic. To nie jest niespójność — to different-cost trade-off (nagranie i tak czeka na sieć przez naturę zadania: musi wrócić transkrypt), ale warto go nazwać wprost, bo różnica nie jest widoczna bez czytania obu funkcji obok siebie.
-- Backend nie ma warstwy `store`/`repository` — dostęp do Supabase jest wołany bezpośrednio z routerów, co jest wprost powodem, dla którego insert mógł się zduplikować bez wysiłku: nie ma jednego miejsca, które by to wymusiło.
+- The pipeline is linear and cycle-free (also confirmed by the `madge` graph in `context/map/artifact-2-structure.md`) — the complexity isn't structural (branching, layers), only **procedural**: three sequential external calls (Whisper, Claude, Supabase) with no transaction spanning all of them.
+- The "refetch instead of optimistic" pattern on the recording path deliberately contrasts with `onUpdate`, which is optimistic. That's not an inconsistency — it's a different-cost trade-off (the recording has to wait on the network anyway, by the nature of the task: it must get a transcript back), but it's worth naming explicitly, since the difference isn't visible without reading both functions side by side.
+- The backend has no `store`/`repository` layer — Supabase access is called directly from the routers, which is directly why the insert could get duplicated with no friction: there's no single place that would have forced otherwise.
 
 ## Historical Context (from prior changes)
 
-- `context/changes/testing-backend-test-foundation/` — skąd wzięła się dzisiejsza asymetria pokrycia (backend CRUD/auth ma testy, bo to była explicit Faza 1; voice pipeline nie, bo to Faza 2, jeszcze nie zaczęta).
-- `context/changes/complete-auth-oauth-reset/` — kontrast procesowy: ten obszar przeszedł pełny cykl `research → plan → implement → review`; voice pipeline nigdy nie miał swojego change-id przed tym researchem.
-- `context/foundation/test-plan.md` — już zawiera dokładnie zidentyfikowane tu ryzyko (§2, pozycja #1) i plan jego domknięcia (§3, Faza 2), obecnie „not started".
+- `context/changes/testing-backend-test-foundation/` — where today's coverage asymmetry comes from (backend CRUD/auth has tests because that was explicit Phase 1; the voice pipeline doesn't, because that's Phase 2, not yet started).
+- `context/changes/complete-auth-oauth-reset/` — a process contrast: this area went through a full `research → plan → implement → review` cycle; the voice pipeline never had its own change-id before this research.
+- `context/foundation/test-plan.md` — already contains exactly the risk identified here (§2, item #1) and a plan to close it (§3, Phase 2), currently "not started."
 
 ## Related Research
 
-- `context/map/repo-map.md`, `context/map/artifact-1-territory.md`, `context/map/artifact-2-structure.md` — Wide Scan, z którego wzięto punkt wejścia do tego Deep Focus.
+- `context/map/repo-map.md`, `context/map/artifact-1-territory.md`, `context/map/artifact-2-structure.md` — the Wide Scan this Deep Focus took its entry point from.
 
-## Weryfikacja twierdzeń strukturalnych (ast-grep)
+## Structural claim verification (ast-grep)
 
-Narzędzie: `npx --package=@ast-grep/cli ast-grep` (efemeryczne, nic nie dopisane do `package.json`). Każde zero potwierdzone klasycznym `grep`, zgodnie z regułą z lekcji.
+Tool: `npx --package=@ast-grep/cli ast-grep` (ephemeral, nothing added to `package.json`). Every zero result confirmed with plain `grep`, per the lesson's rule.
 
-| Twierdzenie                                                                        | Wzorzec                                                                                                    | Wynik                                                                                                                                                                                                            | Werdykt                                                                                                                            |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Insert do `tasks` zduplikowany w dokładnie 2 miejscach, identyczny kształt         | `supabase.from('tasks').insert($$$)`                                                                       | `routes/transcribe.ts:49-51`, `routes/tasks.ts:54-56` — dokładnie 2 trafienia, identyczne                                                                                                                        | **potwierdzone**                                                                                                                   |
-| `TASK_STATUSES` zdefiniowany niezależnie w 2 plikach, identyczna tablica           | `export const TASK_STATUSES = $$$`                                                                         | `src/types.ts:1`, `backend/src/types.ts:22` — dokładnie 2, identyczne `['todo', 'done', 'deleted']`                                                                                                              | **potwierdzone**                                                                                                                   |
-| `@anthropic-ai/sdk` izolowany do jednego pliku                                     | `import $$$ from '@anthropic-ai/sdk'`                                                                      | tylko `backend/src/ai/extract.ts:1`                                                                                                                                                                              | **potwierdzone**                                                                                                                   |
-| `@cloudflare/workers-types` (`Ai`) nie przecieka do routera                        | `import $$$ from '@cloudflare/workers-types'`                                                              | `backend/src/types.ts:1` (deklaracja `Env.AI`) i `backend/src/ai/transcribe.ts:1` — `routes/transcribe.ts` nie importuje go bezpośrednio                                                                         | **potwierdzone**                                                                                                                   |
-| `@supabase/supabase-js` w `src/` ograniczony do `lib/supabase.ts` i `lib/auth.tsx` | `import $$$ from '@supabase/supabase-js'` (osobno `.ts`/`.tsx`, bo ast-grep nie przyjmuje list językowych) | dokładnie po jednym trafieniu w każdym z tych dwóch plików, zero gdzie indziej w `src/`                                                                                                                          | **potwierdzone**                                                                                                                   |
-| Zero testów referencuje `transcribeAudio`/`extractTasks`                           | `grep -rln "transcribeAudio\|extractTasks" backend/test/ src/lib/__tests__/`                               | brak wyników                                                                                                                                                                                                     | **potwierdzone** (grep, nie ast-grep — funkcje wywoływane, nie importowane po nazwie w sposób, który wart był osobnego wzorca AST) |
-| Cross-check: czy insert-duplikacja pomija jakieś inne wystąpienie `.from('tasks')` | `grep -rn "from('tasks')" backend/src/ src/`                                                               | 5 wystąpień łącznie: 2 insert (już policzone), 1 `select().limit(1)` w `index.ts:29` (db-check), 1 `select('*')` w `tasks.ts:30`, 1 `update()` w `tasks.ts:84` — różne operacje, poprawnie odróżnione od insertu | **potwierdzone, bez korekt**                                                                                                       |
+| Claim                                                                                       | Pattern                                                                                                                | Result                                                                                                                                                                                                                               | Verdict                                                                                                                              |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| The `tasks` insert is duplicated in exactly 2 places, identical shape                       | `supabase.from('tasks').insert($$$)`                                                                                   | `routes/transcribe.ts:49-51`, `routes/tasks.ts:54-56` — exactly 2 matches, identical                                                                                                                                                 | **confirmed**                                                                                                                        |
+| `TASK_STATUSES` defined independently in 2 files, identical array                           | `export const TASK_STATUSES = $$$`                                                                                     | `src/types.ts:1`, `backend/src/types.ts:22` — exactly 2, identical `['todo', 'done', 'deleted']`                                                                                                                                     | **confirmed**                                                                                                                        |
+| `@anthropic-ai/sdk` isolated to a single file                                               | `import $$$ from '@anthropic-ai/sdk'`                                                                                  | only `backend/src/ai/extract.ts:1`                                                                                                                                                                                                   | **confirmed**                                                                                                                        |
+| `@cloudflare/workers-types` (`Ai`) doesn't leak into the router                             | `import $$$ from '@cloudflare/workers-types'`                                                                          | `backend/src/types.ts:1` (the `Env.AI` declaration) and `backend/src/ai/transcribe.ts:1` — `routes/transcribe.ts` doesn't import it directly                                                                                         | **confirmed**                                                                                                                        |
+| `@supabase/supabase-js` in `src/` is confined to `lib/supabase.ts` and `lib/auth.tsx`       | `import $$$ from '@supabase/supabase-js'` (run separately for `.ts`/`.tsx`, since ast-grep won't take a language list) | exactly one match in each of those two files, zero anywhere else in `src/`                                                                                                                                                           | **confirmed**                                                                                                                        |
+| Zero tests reference `transcribeAudio`/`extractTasks`                                       | `grep -rln "transcribeAudio\|extractTasks" backend/test/ src/lib/__tests__/`                                           | no results                                                                                                                                                                                                                           | **confirmed** (grep, not ast-grep — these functions are called, not imported by name in a way that warranted a separate AST pattern) |
+| Cross-check: does the insert-duplication finding miss any other `.from('tasks')` occurrence | `grep -rn "from('tasks')" backend/src/ src/`                                                                           | 5 occurrences total: 2 inserts (already counted), 1 `select().limit(1)` in `index.ts:29` (db-check), 1 `select('*')` in `tasks.ts:30`, 1 `update()` in `tasks.ts:84` — different operations, correctly distinguished from the insert | **confirmed, no corrections**                                                                                                        |
 
-Żadne twierdzenie strukturalne w tym raporcie nie zostało obalone ani doprecyzowane — wszystkie liczby i „tylko tutaj" z sekcji Feature overview/Technical debt zgadzają się z wynikiem AST.
+No structural claim in this report was disproved or refined — every number and "only here" claim in the Feature overview/Technical debt sections agrees with the AST results.
 
 ## Open Questions
 
-- Czy produkcyjny Worker ma dziś komplet trzech sekretów (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`) poprawnie ustawionych — nie da się zweryfikować z samego repo (unknown, patrz Technical debt §6).
-- Wizualne zachowanie UI między `recorder.stop()` a rozwiązaniem `load()` (czy jest zauważalna pauza bez żadnego stanu pośredniego) — wywnioskowane z braku kodu pośredniego `setTasks`, nie zweryfikowane przez uruchomienie appki.
-- Czy inne, niepowiązane z tą ścieżką pliki mają podobnie niską liczbę współzmian (co sugerowałoby ogólnie niski churn projektu, nie coś specyficznego dla tej ścieżki) — poza zakresem tego researchu.
+- Whether the production Worker currently has all three secrets (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`) correctly set — can't be verified from the repo alone (unknown, see Technical debt §6).
+- The visible UI behavior between `recorder.stop()` and `load()` resolving (whether there's a noticeable pause with no intermediate state) — inferred from the absence of any intermediate `setTasks` call, not verified by running the app.
+- Whether other files unrelated to this path show a similarly low co-change count (which would suggest generally low project churn rather than something specific to this path) — out of scope for this research.
