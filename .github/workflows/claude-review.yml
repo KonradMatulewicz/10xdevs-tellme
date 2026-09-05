@@ -5,6 +5,15 @@ on:
 jobs:
   claude:
     runs-on: ubuntu-latest
+    # Default GITHUB_TOKEN was read-only (Contents/Metadata/Packages: read only, per the
+    # job's own "GITHUB_TOKEN Permissions" log block) — POST /issues/{n}/comments (PR
+    # comments use the issues API) came back 403 "Resource not accessible by integration"
+    # once track_progress actually tried to post one. pull-requests: write covers PR
+    # comments/reviews; issues: write covers the underlying issue-comments endpoint.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -12,18 +21,24 @@ jobs:
       - uses: anthropics/claude-code-action@fa2b2666b747000bf42767d1f332065b375e3c8f # v1.0.214
         with:
           prompt: |
-            Zrób review tego PR-a pod kątem poprawności, bezpieczeństwa i czytelności,
-            uwzględniając konwencje z CLAUDE.md tego repozytorium (Expo Router, path alias
-            @/*, React Compiler, platform variants). Dla każdego zmienionego pliku podaj
-            konkretne sugestie.
-          # Read-only review: no Bash/Write/Edit needed, and restricting to these tools
-          # means Claude never attempts anything the repo's own .claude/settings.json
-          # would gate behind an interactive "ask" prompt (auto-denied with no human in
-          # CI) — that's what caused 13 permission denials / $3 / 10 min on an earlier run.
-          # Sonnet is also plenty for a review task; Opus was serious overkill on cost/time.
+            Review this PR for correctness, security, and readability,
+            taking into account the conventions in this repository's CLAUDE.md (Expo Router,
+            path alias @/*, React Compiler, platform variants). For each changed file, give
+            concrete suggestions.
+          # --allowedTools pre-authorizes Read/Grep/Glob (no approval prompt); it does NOT
+          # exclude Bash — Bash stays reachable and goes through the normal permission
+          # pipeline, which denies anything not pre-approved when there's no human in CI.
+          # That's fine: Claude falls back to single-command git/Read calls and completes.
+          # Sonnet is plenty for a review task; Opus was overkill on cost/time.
+          #
+          # track_progress is the actual fix for "review ran but no PR comment appeared":
+          # without it the action never posts a summary comment — only classify_inline_comments'
+          # buffered inline annotations (which can legitimately be empty). track_progress forces
+          # tag mode with a tracking comment that gets created/updated with the result.
           claude_args: |
             --model claude-sonnet-5
             --allowedTools Read,Grep,Glob
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           show_full_output: true
+          track_progress: true
